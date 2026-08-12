@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="logo.png" type="image/png">
+  <title>MOON – Pulsera Inteligente de Monitoreo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --night: #0b0f1a;
+      --deep: #111827;
+      --surface: #161d2e;
+      --card: #1e2840;
+      --border: #263050;
+      --blue: #243869;
+      --blue-light: #3a5599;
+      --blue-dim: rgba(36, 56, 105, 0.15);
+      --moon: #8fa8c8;
+      --moon-dim: rgba(143,168,200,0.12);
+      --text: #e8edf5;
+      --text-muted: #8a96a8;
+      --text-dim: #5a6478;
+      --white: #FFFFFF;
+
+      --color-text-primary: #e8edf5;
+      --color-text-secondary: #8a96a8;
+      --color-background-primary: #1e2840;
+      --color-background-secondary: #161d2e;
+      --color-border-tertiary: #263050;
+      --color-border-secondary: #2e3a58;
+      --border-radius-lg: 12px;
+      --border-radius-md: 8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--night);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(11,15,26,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 5%;
+      height: 64px;
+    }
+    .nav-logo {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.4rem; font-weight: 700; letter-spacing: 0.2em;
+      color: var(--blue);
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: var(--text-muted); text-decoration: none;
+      font-size: 0.875rem; font-weight: 500; letter-spacing: 0.05em;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--moon); }
+
+    /* HERO */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 80px 5% 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, rgba(212,168,67,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(4rem, 12vw, 9rem);
+      font-weight: 700; letter-spacing: 0.15em;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--blue-light) 0%, var(--blue) 50%, var(--moon) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 1.5rem;
+    }
+    .hero-tagline {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--text-muted);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: var(--blue);
+      color: var(--white);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600; font-size: 0.9rem; letter-spacing: 0.08em;
+      padding: 14px 32px; border-radius: 4px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .hero-cta:hover { background: var(--blue-light); transform: translateY(-2px); }
+
+    /* SECTIONS */
+    section { padding: 80px 5%; scroll-margin-top: 64px; }
+    .section-label {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--blue); margin-bottom: 1rem;
+    }
+    .section-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 600; line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 1.2rem;
+    }
+    .section-body {
+      color: var(--text-muted); max-width: 640px; line-height: 1.8;
+    }
+    .divider {
+      height: 1px; background: var(--border);
+      margin: 0 5%;
+    }
+
+    /* MONITOR DE PACIENTE */
+    #monitor { background: var(--deep); }
+
+    .pm-root { font-family: 'Space Grotesk', 'Inter', sans-serif; padding: 0; }
+    .pm-header { margin-bottom: 1.5rem; }
+    .pm-label { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #3a5599; margin-bottom: 0.4rem; }
+    .pm-title { font-size: 22px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 0.25rem; }
+    .pm-sub { font-size: 14px; color: var(--color-text-secondary); }
+    .pm-patient { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .pm-avatar { width: 52px; height: 52px; border-radius: 50%; background: #1e2840; border: 1.5px solid #3a5599; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #8fa8c8; flex-shrink: 0; }
+    .pm-patient-info { flex: 1; min-width: 160px; }
+    .pm-patient-name { font-size: 16px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 2px; }
+    .pm-patient-meta { font-size: 13px; color: var(--color-text-secondary); }
+    .pm-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pm-badge { font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 20px; }
+    .pm-badge-warn { background: #FAEEDA; color: #633806; }
+    .pm-badge-danger { background: #FCEBEB; color: #501313; }
+    .pm-badge-ok { background: #EAF3DE; color: #27500A; }
+    .pm-badge-info { background: #E6F1FB; color: #0C447C; }
+    .pm-vitals-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 1rem; }
+    .pm-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
+    .pm-vital { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.1rem 1.25rem; position: relative; overflow: hidden; transition: border-color 0.2s; }
+    .pm-vital.danger { border-color: #E24B4A; }
+    .pm-vital.warning { border-color: #EF9F27; }
+    .pm-vital.ok { border-color: #639922; }
+    .pm-vital-icon { font-size: 20px; margin-bottom: 10px; }
+    .pm-vital-icon.danger { color: #E24B4A; }
+    .pm-vital-icon.warning { color: #BA7517; }
+    .pm-vital-icon.ok { color: #639922; }
+    .pm-vital-name { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 500; letter-spacing: 0.05em; }
+    .pm-vital-val { font-size: 28px; font-weight: 500; color: var(--color-text-primary); line-height: 1; margin-bottom: 3px; }
+    .pm-vital-unit { font-size: 12px; color: var(--color-text-secondary); display: inline; }
+    .pm-vital-status { font-size: 12px; font-weight: 600; margin-top: 8px; padding: 3px 10px; border-radius: 12px; display: inline-block; }
+    .status-danger { background: #FCEBEB; color: #A32D2D; }
+    .status-warning { background: #FAEEDA; color: #854F0B; }
+    .status-ok { background: #EAF3DE; color: #3B6D11; }
+    .pm-bar { height: 4px; border-radius: 2px; margin-top: 10px; background: var(--color-border-tertiary); }
+    .pm-bar-fill { height: 4px; border-radius: 2px; transition: width 0.4s; }
+    .pm-diag-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 1rem; }
+    .pm-diags { display: flex; flex-direction: column; gap: 10px; }
+    .pm-diag { display: flex; align-items: flex-start; gap: 12px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 14px 16px; border-left: 3px solid transparent; }
+    .pm-diag.diag-danger { border-left-color: #E24B4A; }
+    .pm-diag.diag-warning { border-left-color: #EF9F27; }
+    .pm-diag.diag-ok { border-left-color: #639922; }
+    .pm-diag-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+    .pm-diag-icon.danger { color: #E24B4A; }
+    .pm-diag-icon.warning { color: #BA7517; }
+    .pm-diag-icon.ok { color: #639922; }
+    .pm-diag-head { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 2px; }
+    .pm-diag-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+    .pm-controls { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+    .pm-ctrl-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 1rem; }
+    .pm-ctrl-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pm-ctrl-row:last-child { margin-bottom: 0; }
+    .pm-ctrl-label { font-size: 13px; color: var(--color-text-secondary); width: 140px; flex-shrink: 0; }
+    .pm-ctrl-row input[type=range] { flex: 1; min-width: 100px; accent-color: #3a5599; }
+    .pm-ctrl-val { font-size: 14px; font-weight: 500; color: var(--color-text-primary); min-width: 56px; text-align: right; }
+    .pm-diseases { margin-bottom: 1.5rem; }
+    .pm-diseases-label { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px; }
+    .pm-diseases-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pm-disease-pill { font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: 20px; cursor: pointer; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-secondary); transition: all 0.15s; user-select: none; }
+    .pm-disease-pill.active { background: #1e2840; color: #8fa8c8; border-color: #3a5599; }
+
+    /* OBJETIVO */
+    #objetivo { background: var(--night); }
+
+    .objetivo-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 560px;
+      margin-bottom: 2.5rem;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 2rem;
+    }
+
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--blue-light);
+      transform: translateY(-3px);
+    }
+    .feature-card .card-icon {
+      font-size: 22px;
+      color: var(--moon);
+    }
+    .feature-card .card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .feature-card .card-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* COMPONENTES */
+    #componentes { background: var(--deep); }
+    .components-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+    .component-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .component-card:hover { border-color: var(--blue-light); transform: translateY(-3px); }
+    .component-body { padding: 1.4rem; }
+    .component-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem; font-weight: 600;
+      color: var(--text); margin-bottom: 0.3rem;
+    }
+    .component-role { font-size: 0.78rem; color: var(--white); margin-bottom: 0.7rem; font-weight: 500; }
+    .component-desc { font-size: 0.83rem; color: var(--text-muted); line-height: 1.6; }
+
+    /* EQUIPO */
+    #equipo { background: var(--night); }
+
+    .members-list {
+      display: flex; flex-wrap: wrap; gap: 0.75rem;
+      margin-top: 2rem;
+    }
+    .member-pill {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 8px 18px 8px 8px;
+      font-size: 0.88rem; color: var(--text);
+      font-family: 'Space Grotesk', sans-serif; font-weight: 500;
+    }
+    .member-initials {
+      width: 32px; height: 32px; flex-shrink: 0;
+      background: var(--blue-dim); border: 1px solid var(--blue);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.72rem; font-weight: 700; color: var(--blue);
+    }
+
+    .contrib-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1.5rem;
+    }
+    .contrib-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.4rem;
+      transition: border-color 0.2s;
+    }
+    .contrib-card:hover { border-color: var(--blue); }
+    .contrib-header {
+      display: flex; align-items: center; gap: 1rem;
+      margin-bottom: 0.9rem;
+    }
+    .contrib-avatar {
+      width: 42px; height: 42px; flex-shrink: 0;
+      background: var(--blue-dim); border: 1px solid var(--blue);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.85rem; font-weight: 700; color: var(--blue);
+    }
+    .contrib-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem; font-weight: 700; color: var(--text);
+      margin-bottom: 0.2rem;
+    }
+    .contrib-role { font-size: 0.72rem; color: var(--white); font-weight: 500; }
+    .contrib-desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; }
+
+    /* CRONOGRAMA */
+    #cronograma { background: var(--deep); }
+    .cronograma-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 2.5rem;
+      max-width: 720px;
+    }
+    .crono-item {
+      display: flex; align-items: flex-start; gap: 1.2rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.2rem 1.4rem;
+      transition: border-color 0.2s;
+    }
+    .crono-item:hover { border-color: var(--blue-light); }
+    .crono-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.3rem; font-weight: 700;
+      color: var(--blue-light);
+      min-width: 32px;
+    }
+    .crono-fase {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem; font-weight: 600;
+      color: var(--text); margin-bottom: 0.2rem;
+    }
+    .crono-desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; }
+
+    /* FOOTER */
+   /* FOOTER MODIFICADO - CON PALETA DE COLORES CORREGIDA */
+footer {
+  background: var(--night);
+  border-top: 1px solid var(--border);
+  padding: 2.5rem 5%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr; /* Divide en 3 columnas iguales */
+  align-items: start;
+  gap: 1.5rem;
+}
+.footer-left {
+  text-align: left;
+}
+.footer-logo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.2rem; 
+  font-weight: 700; 
+  letter-spacing: 0.2em; 
+  color: var(--blue);
+}
+
+/* Sección de Contactos (Centro) */
+.footer-center {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.footer-contact-label {
+  font-size: 0.65rem; 
+  font-weight: 600; 
+  letter-spacing: 0.15em;
+  text-transform: uppercase; 
+  color: var(--blue);
+  margin-bottom: 0.3rem;
+}
+
+/* Corrección de enlaces */
+.footer-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted); /* Gris sutil */
+  text-decoration: none; /* Chau subrayado azul */
+  transition: color 0.2s ease;
+}
+.footer-link:hover {
+  color: var(--text); /* Se ilumina al pasar el mouse */
+}
+.footer-link i {
+  font-size: 1rem;
+  color: var(--blue);
+}
+
+.footer-right {
+  text-align: right;
+}
+.footer-info { 
+  font-size: 0.78rem; 
+  color: var(--text-muted); 
+  line-height: 1.8; 
+}
+.footer-institution-label {
+  font-size: 0.65rem; 
+  font-weight: 600; 
+  letter-spacing: 0.15em;
+  text-transform: uppercase; 
+  color: var(--blue);
+  margin-bottom: 0.3rem;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  footer { 
+    grid-template-columns: 1fr; /* Se apila en celulares */
+    text-align: center; 
+    gap: 2rem;
+  }
+  .footer-left, .footer-right {
+    text-align: center;
+  }
+}
+    /* RESPONSIVE */
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      footer { flex-direction: column; text-align: center; }
+      .cards-grid { grid-template-columns: 1fr 1fr; }
+    }
+    /* ===== SECCIÓN PACIENTES (login / formulario / panel) ===== */
+    :root { --danger: #E24B4A; }
+
+    #pacientes .pt-wrap { max-width: 640px; margin: 0 auto; }
+
+    .pt-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2.2rem;
+    }
+    .pt-error {
+      display: none;
+      background: rgba(226,75,74,0.1);
+      border: 1px solid var(--danger);
+      color: #f2a3a2;
+      font-size: 0.8rem;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 1.2rem;
+    }
+    .pt-field { margin-bottom: 1.1rem; }
+    .pt-field label {
+      display: block; font-size: 0.78rem; color: var(--text-muted);
+      margin-bottom: 0.4rem; font-weight: 500;
+    }
+    .pt-field input, .pt-field select {
+      width: 100%;
+      background: var(--color-background-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .pt-field input:focus, .pt-field select:focus { border-color: var(--blue-light); }
+    .pt-field input::placeholder { color: var(--text-dim); }
+    .pt-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.2rem; }
+    .pt-field-full { grid-column: 1 / -1; }
+
+    .pt-btn {
+      width: 100%;
+      background: var(--blue);
+      color: var(--white);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600; font-size: 0.9rem; letter-spacing: 0.05em;
+      padding: 13px; border-radius: 8px; border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+      margin-top: 0.4rem;
+    }
+    .pt-btn:hover { background: var(--blue-light); transform: translateY(-1px); }
+
+    .pt-switch { text-align: center; margin-top: 1.4rem; font-size: 0.83rem; color: var(--text-muted); }
+    .pt-switch button {
+      background: none; border: none; cursor: pointer;
+      color: var(--moon); font-weight: 600;
+      font-family: 'Inter', sans-serif; font-size: 0.83rem;
+    }
+    .pt-switch button:hover { text-decoration: underline; }
+
+    .pt-subtitle {
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); margin: 1.4rem 0 0.7rem;
+    }
+    .pt-vitals-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.4rem; }
+    .pt-vital-ctrl { background: var(--color-background-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
+    .pt-vital-ctrl label { display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .pt-vital-ctrl input[type=range] { width: 100%; accent-color: #3a5599; }
+
+    .pt-panel-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+    .pt-ghost-btn {
+      background: none; border: 1px solid var(--border); color: var(--text-muted);
+      font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500;
+      padding: 8px 16px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .pt-ghost-btn:hover { border-color: var(--blue-light); color: var(--moon); }
+    .pt-ghost-btn.danger:hover { border-color: var(--danger); color: #f2a3a2; }
+
+    .pt-hello { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.2rem; }
+
+    @media (max-width: 640px) {
+      .pt-card { padding: 1.5rem; }
+      .pt-form-grid { grid-template-columns: 1fr; }
+      .pt-vitals-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="#">MOON</a>
+    <ul class="nav-links">
+      <li><a href="#monitor">Monitor</a></li>
+      <li><a href="#objetivo">Objetivo</a></li>
+      <li><a href="#componentes">Componentes</a></li>
+      <li><a href="#equipo">Equipo</a></li>
+      <li><a href="#cronograma">Cronograma</a></li>
+      <li><a href="#pacientes" id="nav-pacientes">Pacientes</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <h1>MOON</h1>
+    <p class="hero-tagline">
+      Pulsera inteligente de monitoreo vital. Detecta caídas, mide signos vitales y alerta a tus contactos de emergencia en tiempo real.
+    </p>
+    <a href="#monitor" class="hero-cta">Ver demo en vivo →</a>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- MONITOR DE PACIENTE — ahora primero -->
+  <section id="monitor">
+    <p class="section-label">Demo interactiva</p>
+    <h2 class="section-title">Monitor en tiempo real</h2>
+    <p class="section-body" style="margin-bottom: 2.5rem;">
+      Así visualiza MOON los signos vitales del usuario. Simulá distintos escenarios ajustando los valores y seleccionando condiciones preexistentes para ver cómo responde el sistema de diagnóstico automático.
+    </p>
+
+    <div class="pm-root">
+      <div class="pm-controls">
+        <div class="pm-ctrl-title">Ajustar signos vitales</div>
+        <div class="pm-ctrl-row">
+          <span class="pm-ctrl-label"><i class="ti ti-droplet" aria-hidden="true"></i> SpO₂ (%)</span>
+          <input type="range" id="spo2-ctrl" min="80" max="100" step="1" value="97" oninput="update()">
+          <span class="pm-ctrl-val" id="spo2-show">97 %</span>
+        </div>
+        <div class="pm-ctrl-row">
+          <span class="pm-ctrl-label"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i> BPM</span>
+          <input type="range" id="bpm-ctrl" min="30" max="180" step="1" value="78" oninput="update()">
+          <span class="pm-ctrl-val" id="bpm-show">78 bpm</span>
+        </div>
+        <div class="pm-ctrl-row">
+          <span class="pm-ctrl-label"><i class="ti ti-temperature" aria-hidden="true"></i> Temperatura</span>
+          <input type="range" id="temp-ctrl" min="34" max="42" step="0.1" value="36.8" oninput="update()">
+          <span class="pm-ctrl-val" id="temp-show">36.8 °C</span>
+        </div>
+      </div>
+
+      <div class="pm-patient">
+        <div class="pm-avatar">JG</div>
+        <div class="pm-patient-info">
+          <div class="pm-patient-name">Juan García</div>
+          <div class="pm-patient-meta">72 años · Masculino · Uso de MOON activo</div>
+        </div>
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);margin-bottom:6px;">Enfermedades</div>
+          <div class="pm-badges" id="disease-badges"></div>
+        </div>
+      </div>
+
+      <div class="pm-diseases">
+        <div class="pm-diseases-label">Seleccioná las enfermedades del paciente:</div>
+        <div class="pm-diseases-pills" id="disease-pills"></div>
+      </div>
+
+      <div class="pm-vitals-title">Signos vitales</div>
+      <div class="pm-vitals">
+        <div class="pm-vital" id="card-spo2">
+          <div class="pm-vital-icon" id="icon-spo2"><i class="ti ti-droplet" aria-hidden="true"></i></div>
+          <div class="pm-vital-name">Oxígeno en sangre</div>
+          <div><span class="pm-vital-val" id="val-spo2">97</span><span class="pm-vital-unit"> %</span></div>
+          <div class="pm-bar"><div class="pm-bar-fill" id="bar-spo2" style="width:85%;background:#639922"></div></div>
+          <div class="pm-vital-status" id="status-spo2"></div>
+        </div>
+        <div class="pm-vital" id="card-bpm">
+          <div class="pm-vital-icon" id="icon-bpm"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i></div>
+          <div class="pm-vital-name">Frecuencia cardíaca</div>
+          <div><span class="pm-vital-val" id="val-bpm">78</span><span class="pm-vital-unit"> bpm</span></div>
+          <div class="pm-bar"><div class="pm-bar-fill" id="bar-bpm" style="width:55%;background:#639922"></div></div>
+          <div class="pm-vital-status" id="status-bpm"></div>
+        </div>
+        <div class="pm-vital" id="card-temp">
+          <div class="pm-vital-icon" id="icon-temp"><i class="ti ti-temperature" aria-hidden="true"></i></div>
+          <div class="pm-vital-name">Temperatura corporal</div>
+          <div><span class="pm-vital-val" id="val-temp">36.8</span><span class="pm-vital-unit"> °C</span></div>
+          <div class="pm-bar"><div class="pm-bar-fill" id="bar-temp" style="width:50%;background:#639922"></div></div>
+          <div class="pm-vital-status" id="status-temp"></div>
+        </div>
+      </div>
+
+      <div class="pm-diag-title">Diagnóstico automático</div>
+      <div class="pm-diags" id="diags"></div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- OBJETIVO -->
+  <section id="objetivo">
+    <p class="section-label">Objetivo</p>
+    <h2 class="section-title">Seguridad para quienes están solos</h2>
+    <p class="objetivo-desc">
+      MOON está diseñado para personas mayores, personas con discapacidad o quienes trabajan solas y no tienen supervisión constante. El dispositivo monitorea en tiempo real y actúa automáticamente ante una emergencia.
+    </p>
+
+    <div class="cards-grid">
+      <div class="feature-card">
+        <i class="ti ti-run card-icon" aria-hidden="true"></i>
+        <p class="card-title">Detección de caídas</p>
+        <p class="card-desc">Detecta automáticamente si el usuario cae y envía una alerta de inmediato.</p>
+      </div>
+      <div class="feature-card">
+        <i class="ti ti-heart-rate-monitor card-icon" aria-hidden="true"></i>
+        <p class="card-title">Frecuencia cardíaca</p>
+        <p class="card-desc">Monitorea el ritmo cardíaco en tiempo real para detectar anomalías.</p>
+      </div>
+      <div class="feature-card">
+        <i class="ti ti-droplet card-icon" aria-hidden="true"></i>
+        <p class="card-title">Oxígeno en sangre</p>
+        <p class="card-desc">Mide el nivel de SpO₂ y alerta ante valores fuera del rango seguro.</p>
+      </div>
+      <div class="feature-card">
+        <i class="ti ti-bell-ringing card-icon" aria-hidden="true"></i>
+        <p class="card-title">Alerta automática</p>
+        <p class="card-desc">El dispositivo activa una alerta de forma automática ante cualquier emergencia detectada.</p>
+      </div>
+      <div class="feature-card">
+        <i class="ti ti-wifi card-icon" aria-hidden="true"></i>
+        <p class="card-title">Notificación WiFi / BT</p>
+        <p class="card-desc">Envía notificaciones vía WiFi o Bluetooth a dispositivos cercanos o remotos.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- COMPONENTES -->
+  <section id="componentes">
+    <p class="section-label">Hardware</p>
+    <h2 class="section-title">Componentes del sistema</h2>
+
+    <div class="components-grid">
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">ESP32-C3 SuperMini</div>
+          <div class="component-role">Microcontrolador principal</div>
+          <p class="component-desc">Cerebro del dispositivo. Procesa datos de todos los sensores, toma decisiones y envía alertas por WiFi o Bluetooth.</p>
+        </div>
+      </div>
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">MAX30102</div>
+          <div class="component-role">Sensor de signos vitales</div>
+          <p class="component-desc">Mide frecuencia cardíaca y saturación de oxígeno en sangre mediante emisión de luz roja e infrarroja.</p>
+        </div>
+      </div>
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">MPU6050</div>
+          <div class="component-role">Acelerómetro + Giroscopio</div>
+          <p class="component-desc">Detecta cambios bruscos de movimiento en los ejes X, Y y Z para identificar caídas con precisión.</p>
+        </div>
+      </div>
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">Pantalla OLED</div>
+          <div class="component-role">Visualización local</div>
+          <p class="component-desc">Muestra datos básicos directamente en la pulsera: estado, nivel de batería y valores en tiempo real.</p>
+        </div>
+      </div>
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">Batería Li-Po + TP4056</div>
+          <div class="component-role">Alimentación</div>
+          <p class="component-desc">Batería liviana recargable por USB. El módulo TP4056 protege contra sobrecargas y prolonga la vida útil.</p>
+        </div>
+      </div>
+      <div class="component-card">
+        <div class="component-body">
+          <div class="component-name">Botón de emergencia</div>
+          <div class="component-role">Alerta manual</div>
+          <p class="component-desc">Permite pedir ayuda manualmente con un solo toque, incluso si el sistema automático no detecta la caída.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- EQUIPO -->
+  <section id="equipo">
+    <p class="section-label">Integrantes</p>
+    <h2 class="section-title">El equipo detrás de MOON</h2>
+
+    <div class="members-list">
+      <div class="member-pill"><span class="member-initials">TM</span> Tomás Morales</div>
+      <div class="member-pill"><span class="member-initials">PL</span> Patricio Luna</div>
+      <div class="member-pill"><span class="member-initials">ER</span> Ezequiel Ríos Cabral</div>
+      <div class="member-pill"><span class="member-initials">FA</span> Federico Addona</div>
+      <div class="member-pill"><span class="member-initials">LT</span> Lucas Torrico</div>
+    </div>
+
+    <p class="section-label" style="margin-top: 3rem;">Contribuciones</p>
+    <div class="contrib-grid">
+      <div class="contrib-card">
+        <div class="contrib-header">
+          <span class="contrib-avatar">TM</span>
+          <div>
+            <div class="contrib-name">Tomás Morales</div>
+            <div class="contrib-role">Microcontroladores y Arquitectura de Sistema</div>
+          </div>
+        </div>
+        <p class="contrib-desc">Gestión del ESP32-C3 SuperMini, lógica de datos en tiempo real y comunicaciones inalámbricas para el envío de alertas.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="contrib-header">
+          <span class="contrib-avatar">PL</span>
+          <div>
+            <div class="contrib-name">Patricio Luna</div>
+            <div class="contrib-role">Monitoreo de Signos Vitales y Biometría</div>
+          </div>
+        </div>
+        <p class="contrib-desc">Implementación del sensor MAX30102 para la medición precisa de la frecuencia cardíaca (BPM) y oxígeno en sangre (SpO₂).</p>
+      </div>
+      <div class="contrib-card">
+        <div class="contrib-header">
+          <span class="contrib-avatar">ER</span>
+          <div>
+            <div class="contrib-name">Ezequiel Ríos Cabral</div>
+            <div class="contrib-role">Hardware y Soluciones de Energía</div>
+          </div>
+        </div>
+        <p class="contrib-desc">Encargado de la alimentación del dispositivo mediante baterías Li-Po y del diseño ergonómico de la carcasa compacta.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="contrib-header">
+          <span class="contrib-avatar">FA</span>
+          <div>
+            <div class="contrib-name">Federico Addona</div>
+            <div class="contrib-role">Cinemática y Detección de Eventos de Riesgo</div>
+          </div>
+        </div>
+        <p class="contrib-desc">Programación del módulo MPU6050 (acelerómetro y giroscopio) y algoritmos autónomos de detección de caídas.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="contrib-header">
+          <span class="contrib-avatar">LT</span>
+          <div>
+            <div class="contrib-name">Lucas Torrico</div>
+            <div class="contrib-role">Comunicaciones y Sistemas de Alerta</div>
+          </div>
+        </div>
+        <p class="contrib-desc">Desarrollo de la lógica de alertas automáticas y del botón de emergencia para la notificación inmediata al contacto.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- CRONOGRAMA -->
+  <section id="cronograma">
+    <p class="section-label">Cronograma</p>
+    <h2 class="section-title">Plan de desarrollo</h2>
+    <p class="section-body">Etapas del proyecto desde el diseño hasta la presentación final.</p>
+
+    <div class="cronograma-list">
+      <div class="crono-item">
+        <span class="crono-num">01</span>
+        <div class="crono-text">
+          <div class="crono-fase">Relevamiento y diseño</div>
+          <p class="crono-desc">Definición de requerimientos, selección de componentes y diseño del circuito.</p>
+        </div>
+      </div>
+      <div class="crono-item">
+        <span class="crono-num">02</span>
+        <div class="crono-text">
+          <div class="crono-fase">Integración de hardware</div>
+          <p class="crono-desc">Montaje del ESP32-C3, sensores MAX30102, MPU6050, pantalla OLED y módulo de carga.</p>
+        </div>
+      </div>
+      <div class="crono-item">
+        <span class="crono-num">03</span>
+        <div class="crono-text">
+          <div class="crono-fase">Desarrollo de firmware</div>
+          <p class="crono-desc">Programación de la lógica de detección de caídas, lectura de signos vitales y envío de alertas.</p>
+        </div>
+      </div>
+      <div class="crono-item">
+        <span class="crono-num">04</span>
+        <div class="crono-text">
+          <div class="crono-fase">Pruebas y ajustes</div>
+          <p class="crono-desc">Validación del sistema completo, calibración de umbrales y corrección de errores.</p>
+        </div>
+      </div>
+      <div class="crono-item">
+        <span class="crono-num">05</span>
+        <div class="crono-text">
+          <div class="crono-fase">Presentación final</div>
+          <p class="crono-desc">Exposición del prototipo funcional ante el tribunal evaluador de Prácticas Profesionalizantes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECCIÓN PACIENTES: login / formulario / panel, todo en la misma página -->
+  <section id="pacientes">
+    <p class="section-label">Acceso de pacientes</p>
+    <h2 class="section-title" id="pt-title">Iniciar sesión</h2>
+    <p class="section-body" style="margin-bottom: 2.2rem;" id="pt-sub">Ingresá para ver el monitor de signos vitales del paciente en tiempo real.</p>
+
+    <div class="pt-wrap">
+
+      <!-- LOGIN -->
+      <div id="pt-loginView">
+        <div class="pt-card">
+          <div class="pt-error" id="pt-loginError">Email o contraseña incorrectos.</div>
+          <form id="pt-loginForm">
+            <div class="pt-field">
+              <label for="pt-loginEmail">Email</label>
+              <input type="email" id="pt-loginEmail" placeholder="tu@email.com" required>
+            </div>
+            <div class="pt-field">
+              <label for="pt-loginPass">Contraseña</label>
+              <input type="password" id="pt-loginPass" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="pt-btn">Ingresar</button>
+          </form>
+          <div class="pt-switch">¿No tenés cuenta? <button type="button" onclick="ptShowRegister()">Crear una cuenta →</button></div>
+        </div>
+      </div>
+
+      <!-- REGISTRO -->
+      <div id="pt-registerView" style="display:none;">
+        <div class="pt-card">
+          <div class="pt-error" id="pt-registerError">Completá todos los campos.</div>
+          <form id="pt-registerForm">
+            <div class="pt-field">
+              <label for="pt-regName">Nombre completo</label>
+              <input type="text" id="pt-regName" placeholder="Ej: Juan García" required>
+            </div>
+            <div class="pt-field">
+              <label for="pt-regEmail">Email</label>
+              <input type="email" id="pt-regEmail" placeholder="tu@email.com" required>
+            </div>
+            <div class="pt-field">
+              <label for="pt-regPass">Contraseña</label>
+              <input type="password" id="pt-regPass" placeholder="Mínimo 6 caracteres" required>
+            </div>
+            <button type="submit" class="pt-btn">Crear cuenta</button>
+          </form>
+          <div class="pt-switch">¿Ya tenés cuenta? <button type="button" onclick="ptShowLogin()">Iniciar sesión →</button></div>
+        </div>
+      </div>
+
+      <!-- FORMULARIO DE ALTA DEL PACIENTE (primera vez) -->
+      <div id="pt-setupView" style="display:none;">
+        <div class="pt-card">
+          <div class="pt-error" id="pt-setupError">Completá los campos obligatorios.</div>
+          <form id="pt-setupForm">
+            <div class="pt-form-grid">
+              <div class="pt-field pt-field-full">
+                <label for="pt-pName">Nombre completo del paciente</label>
+                <input type="text" id="pt-pName" placeholder="Ej: Juan García" required>
+              </div>
+              <div class="pt-field">
+                <label for="pt-pAge">Edad</label>
+                <input type="number" id="pt-pAge" min="0" max="120" placeholder="Ej: 72" required>
+              </div>
+              <div class="pt-field">
+                <label for="pt-pGender">Género</label>
+                <select id="pt-pGender" required>
+                  <option value="" disabled selected>Seleccionar...</option>
+                  <option value="Masculino">Masculino</option>
+                  <option value="Femenino">Femenino</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="pt-subtitle">Enfermedades preexistentes</div>
+            <div class="pm-diseases-pills" id="pt-setupDiseasePills"></div>
+
+            <div class="pt-field pt-field-full" style="margin-top:1.2rem;">
+              <label for="pt-pOtras">Otras condiciones relevantes (opcional)</label>
+              <input type="text" id="pt-pOtras" placeholder="Ej: alergia a la penicilina, marcapasos, etc.">
+            </div>
+
+            <div class="pt-subtitle">Estado vital inicial</div>
+            <div class="pt-vitals-row">
+              <div class="pt-vital-ctrl">
+                <label><span>SpO₂</span><span id="pt-setupSpo2Show">97 %</span></label>
+                <input type="range" id="pt-setupSpo2" min="80" max="100" step="1" value="97" oninput="document.getElementById('pt-setupSpo2Show').textContent=this.value+' %'">
+              </div>
+              <div class="pt-vital-ctrl">
+                <label><span>Frec. cardíaca</span><span id="pt-setupBpmShow">78 bpm</span></label>
+                <input type="range" id="pt-setupBpm" min="30" max="180" step="1" value="78" oninput="document.getElementById('pt-setupBpmShow').textContent=this.value+' bpm'">
+              </div>
+              <div class="pt-vital-ctrl">
+                <label><span>Temperatura</span><span id="pt-setupTempShow">36.8 °C</span></label>
+                <input type="range" id="pt-setupTemp" min="34" max="42" step="0.1" value="36.8" oninput="document.getElementById('pt-setupTempShow').textContent=parseFloat(this.value).toFixed(1)+' °C'">
+              </div>
+            </div>
+
+            <button type="submit" class="pt-btn" style="margin-top:1.6rem;">Guardar y ver panel del paciente</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- PANEL DEL PACIENTE -->
+      <div id="pt-panelView" style="display:none;">
+        <div class="pt-panel-top">
+          <div class="pt-hello" id="pt-hello" style="margin-bottom:0;"></div>
+          <div style="display:flex; gap:10px;">
+            <button class="pt-ghost-btn" onclick="ptEditProfile()"><i class="ti ti-edit"></i> Editar perfil</button>
+            <button class="pt-ghost-btn danger" onclick="ptLogout()"><i class="ti ti-logout"></i> Cerrar sesión</button>
+          </div>
+        </div>
+
+        <div class="pm-root">
+          <div class="pm-patient">
+            <div class="pm-avatar" id="pt-avatar">--</div>
+            <div class="pm-patient-info">
+              <div class="pm-patient-name" id="pt-name">-</div>
+              <div class="pm-patient-meta" id="pt-meta">-</div>
+            </div>
+            <div>
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);margin-bottom:6px;">Enfermedades</div>
+              <div class="pm-badges" id="pt-disease-badges"></div>
+            </div>
+          </div>
+
+          <div class="pm-controls">
+            <div class="pm-ctrl-title">Ajustar signos vitales (simulación)</div>
+            <div class="pm-ctrl-row">
+              <span class="pm-ctrl-label"><i class="ti ti-droplet" aria-hidden="true"></i> SpO₂ (%)</span>
+              <input type="range" id="pt-spo2-ctrl" min="80" max="100" step="1" value="97" oninput="ptUpdate()">
+              <span class="pm-ctrl-val" id="pt-spo2-show">97 %</span>
+            </div>
+            <div class="pm-ctrl-row">
+              <span class="pm-ctrl-label"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i> BPM</span>
+              <input type="range" id="pt-bpm-ctrl" min="30" max="180" step="1" value="78" oninput="ptUpdate()">
+              <span class="pm-ctrl-val" id="pt-bpm-show">78 bpm</span>
+            </div>
+            <div class="pm-ctrl-row">
+              <span class="pm-ctrl-label"><i class="ti ti-temperature" aria-hidden="true"></i> Temperatura</span>
+              <input type="range" id="pt-temp-ctrl" min="34" max="42" step="0.1" value="36.8" oninput="ptUpdate()">
+              <span class="pm-ctrl-val" id="pt-temp-show">36.8 °C</span>
+            </div>
+          </div>
+
+          <div class="pm-vitals-title">Signos vitales</div>
+          <div class="pm-vitals">
+            <div class="pm-vital" id="pt-card-spo2">
+              <div class="pm-vital-icon" id="pt-icon-spo2"><i class="ti ti-droplet" aria-hidden="true"></i></div>
+              <div class="pm-vital-name">Oxígeno en sangre</div>
+              <div><span class="pm-vital-val" id="pt-val-spo2">97</span><span class="pm-vital-unit"> %</span></div>
+              <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-spo2" style="width:85%;background:#639922"></div></div>
+              <div class="pm-vital-status" id="pt-status-spo2"></div>
+            </div>
+            <div class="pm-vital" id="pt-card-bpm">
+              <div class="pm-vital-icon" id="pt-icon-bpm"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i></div>
+              <div class="pm-vital-name">Frecuencia cardíaca</div>
+              <div><span class="pm-vital-val" id="pt-val-bpm">78</span><span class="pm-vital-unit"> bpm</span></div>
+              <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-bpm" style="width:55%;background:#639922"></div></div>
+              <div class="pm-vital-status" id="pt-status-bpm"></div>
+            </div>
+            <div class="pm-vital" id="pt-card-temp">
+              <div class="pm-vital-icon" id="pt-icon-temp"><i class="ti ti-temperature" aria-hidden="true"></i></div>
+              <div class="pm-vital-name">Temperatura corporal</div>
+              <div><span class="pm-vital-val" id="pt-val-temp">36.8</span><span class="pm-vital-unit"> °C</span></div>
+              <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-temp" style="width:50%;background:#639922"></div></div>
+              <div class="pm-vital-status" id="pt-status-temp"></div>
+            </div>
+          </div>
+
+          <div class="pm-diag-title">Diagnóstico automático</div>
+          <div class="pm-diags" id="pt-diags"></div>
+
+          <div id="pt-otrasBox" style="display:none; margin-top:1.5rem; background:var(--color-background-secondary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:14px 16px;">
+            <div style="font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Otras condiciones relevantes</div>
+            <div style="font-size:13px; color:var(--color-text-secondary);" id="pt-otrasText"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+  <div class="footer-left">
+    <span class="footer-logo">MOON</span>
+  </div>
+  
+  <div class="footer-center">
+    <div class="footer-contact-label">Contactos</div>
+    <a href="mailto:proyectomoon2026@gmail.com" class="footer-link">
+      <i class="ti ti-mail"></i> proyectomoon2026@gmail.com
+    </a>
+    <a href="https://instagram.com/proyectomoon20206" target="_blank" class="footer-link">
+      <i class="ti ti-brand-instagram"></i> proyectomoon2026
+    </a>
+  </div>
+
+  <div class="footer-right">
+    <div class="footer-info">
+      <div class="footer-institution-label">Institución</div>
+      Escuela de Educación Técnica N°7<br>
+      Taller Regional Quilmes · Especialidad Aviónica<br>
+    </div>
+  </div>
+</footer>
+
+  <script>
+    const diseases = [
+      { id: 'hta', label: 'Hipertensión', badge: 'pm-badge-warn' },
+      { id: 'diabetes', label: 'Diabetes', badge: 'pm-badge-warn' },
+      { id: 'epoc', label: 'EPOC', badge: 'pm-badge-danger' },
+      { id: 'arritmia', label: 'Arritmia', badge: 'pm-badge-danger' },
+      { id: 'asma', label: 'Asma', badge: 'pm-badge-warn' },
+      { id: 'anemia', label: 'Anemia', badge: 'pm-badge-info' },
+    ];
+    let active = new Set(['hta', 'epoc']);
+
+    function renderDiseases() {
+      const pillsEl = document.getElementById('disease-pills');
+      const badgesEl = document.getElementById('disease-badges');
+      pillsEl.innerHTML = diseases.map(d =>
+        `<span class="pm-disease-pill ${active.has(d.id)?'active':''}" onclick="toggleDis('${d.id}')">${d.label}</span>`
+      ).join('');
+      badgesEl.innerHTML = [...active].map(id => {
+        const d = diseases.find(x=>x.id===id);
+        return d ? `<span class="pm-badge ${d.badge}">${d.label}</span>` : '';
+      }).join('');
+    }
+
+    function toggleDis(id) {
+      active.has(id) ? active.delete(id) : active.add(id);
+      renderDiseases();
+      update();
+    }
+
+    function update() {
+      const spo2 = parseFloat(document.getElementById('spo2-ctrl').value);
+      const bpm = parseInt(document.getElementById('bpm-ctrl').value);
+      const temp = parseFloat(document.getElementById('temp-ctrl').value);
+
+      document.getElementById('spo2-show').textContent = spo2 + ' %';
+      document.getElementById('bpm-show').textContent = bpm + ' bpm';
+      document.getElementById('temp-show').textContent = temp.toFixed(1) + ' °C';
+
+      document.getElementById('val-spo2').textContent = spo2;
+      document.getElementById('val-bpm').textContent = bpm;
+      document.getElementById('val-temp').textContent = temp.toFixed(1);
+
+      let spo2State, bpmState, tempState;
+
+      if (spo2 < 90) spo2State = 'danger';
+      else if (spo2 < 95) spo2State = 'warning';
+      else spo2State = 'ok';
+
+      const hasArritmia = active.has('arritmia');
+      if (bpm < 50 || bpm > 120) bpmState = 'danger';
+      else if (bpm < 60 || bpm > 100 || hasArritmia) bpmState = 'warning';
+      else bpmState = 'ok';
+
+      if (temp >= 39) tempState = 'danger';
+      else if (temp >= 37.5) tempState = 'warning';
+      else if (temp < 35.5) tempState = 'danger';
+      else tempState = 'ok';
+
+      setVital('spo2', spo2State, spo2 + ' %', ((spo2-80)/20)*100, spo2State==='ok'?'#639922':spo2State==='warning'?'#EF9F27':'#E24B4A');
+      setVital('bpm', bpmState, bpm + ' bpm', Math.min(((bpm-30)/150)*100,100), bpmState==='ok'?'#639922':bpmState==='warning'?'#EF9F27':'#E24B4A');
+      setVital('temp', tempState, temp.toFixed(1)+' °C', Math.min(((temp-34)/8)*100,100), tempState==='ok'?'#639922':tempState==='warning'?'#EF9F27':'#E24B4A');
+
+      buildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
+    }
+
+    function setVital(id, state, _val, pct, color) {
+      const card = document.getElementById('card-'+id);
+      const icon = document.getElementById('icon-'+id);
+      const bar = document.getElementById('bar-'+id);
+      const statusEl = document.getElementById('status-'+id);
+      card.className = 'pm-vital ' + state;
+      icon.className = 'pm-vital-icon ' + state;
+      bar.style.width = Math.round(pct) + '%';
+      bar.style.background = color;
+      const labels = {
+        spo2: { ok:'Normal', warning:'Bajo', danger:'Crítico' },
+        bpm: { ok:'Normal', warning:'Irregular', danger:'Crítico' },
+        temp: { ok:'Normal', warning:'Fiebre', danger:'Peligroso' }
+      };
+      statusEl.textContent = labels[id][state];
+      statusEl.className = 'pm-vital-status status-'+state;
+    }
+
+    function buildDiags(spo2, s0, bpm, sb, temp, st) {
+      const diags = [];
+
+      if (st === 'danger' && temp >= 39) {
+        diags.push({ cls:'danger', icon:'ti-flame', title:'Fiebre alta', body:`Temperatura de ${temp.toFixed(1)} °C. Riesgo de convulsiones. Se recomienda asistencia médica inmediata.` });
+      } else if (st === 'warning') {
+        diags.push({ cls:'warning', icon:'ti-thermometer', title:'Fiebre leve', body:`Temperatura de ${temp.toFixed(1)} °C. Mantener hidratado al paciente y monitorear cada 30 minutos.` });
+      } else if (st === 'danger' && temp < 35.5) {
+        diags.push({ cls:'danger', icon:'ti-snowflake', title:'Hipotermia', body:`Temperatura de ${temp.toFixed(1)} °C, por debajo del rango seguro. Requiere atención inmediata.` });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-temperature', title:'Temperatura normal', body:`Temperatura de ${temp.toFixed(1)} °C dentro del rango fisiológico (35.5–37.4 °C).` });
+      }
+
+      if (s0 === 'danger') {
+        const msg = active.has('epoc') || active.has('asma')
+          ? `SpO₂ ${spo2}%. En pacientes con EPOC/Asma, esto representa insuficiencia respiratoria severa.`
+          : `SpO₂ ${spo2}%. Hipoxemia grave. Requiere oxígeno suplementario de emergencia.`;
+        diags.push({ cls:'danger', icon:'ti-urgent', title:'Hipoxemia grave', body: msg });
+      } else if (s0 === 'warning') {
+        const msg = active.has('anemia')
+          ? `SpO₂ ${spo2}%. En pacientes con anemia, la capacidad de transporte de O₂ ya está comprometida. Monitorear.`
+          : `SpO₂ ${spo2}%. Saturación baja. Asegurarse de que el sensor esté bien colocado y observar evolución.`;
+        diags.push({ cls:'warning', icon:'ti-droplet', title:'Saturación baja', body: msg });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-droplet', title:'Oxigenación normal', body:`SpO₂ ${spo2}%, dentro del rango seguro (95–100%).` });
+      }
+
+      if (sb === 'danger') {
+        if (bpm > 120) diags.push({ cls:'danger', icon:'ti-heart-off', title:'Taquicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. Riesgo de fallo cardíaco. Actuar de inmediato.` });
+        else diags.push({ cls:'danger', icon:'ti-heart-off', title:'Bradicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. El corazón no bombea suficiente sangre. Atención urgente.` });
+      } else if (sb === 'warning') {
+        const msg = active.has('arritmia')
+          ? `BPM: ${bpm}. En pacientes con arritmia, cualquier variación fuera del rango habitual requiere atención.`
+          : active.has('hta')
+            ? `BPM: ${bpm}. En pacientes con hipertensión, la frecuencia elevada aumenta el riesgo cardiovascular.`
+            : `Frecuencia cardíaca de ${bpm} bpm. Levemente fuera del rango ideal (60–100 bpm). Monitorear.`;
+        diags.push({ cls:'warning', icon:'ti-heart-rate-monitor', title:'Frecuencia irregular', body: msg });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-heart-rate-monitor', title:'Ritmo cardíaco normal', body:`Frecuencia de ${bpm} bpm dentro del rango normal.` });
+      }
+
+      if (active.has('epoc') && spo2 < 95) {
+        diags.push({ cls:'warning', icon:'ti-lungs', title:'Alerta EPOC', body:'La SpO₂ baja combinada con EPOC indica posible exacerbación. Evaluar broncodilatador.' });
+      }
+      if (active.has('diabetes') && temp >= 38) {
+        diags.push({ cls:'warning', icon:'ti-droplet-half-2', title:'Alerta Diabetes + Fiebre', body:'En pacientes diabéticos, la fiebre eleva la glucosa y aumenta riesgo de descompensación. Monitorear glucemia.' });
+      }
+      if (active.has('hta') && bpm > 100) {
+        diags.push({ cls:'warning', icon:'ti-gauge', title:'Alerta Hipertensión', body:'La taquicardia en pacientes hipertensos puede indicar crisis hipertensiva. Medir presión arterial.' });
+      }
+
+      const el = document.getElementById('diags');
+      el.innerHTML = diags.map(d =>
+        `<div class="pm-diag diag-${d.cls}">
+          <i class="ti ${d.icon} pm-diag-icon ${d.cls}" aria-hidden="true"></i>
+          <div>
+            <div class="pm-diag-head">${d.title}</div>
+            <div class="pm-diag-body">${d.body}</div>
+          </div>
+        </div>`
+      ).join('');
+    }
+
+    renderDiseases();
+    update();
+
+    /* ============================================================
+       SECCIÓN PACIENTES: login, registro, alta del paciente y panel
+       (usa nombres propios "pt*" para no chocar con la demo de arriba)
+       ============================================================ */
+
+    // ---- Vistas ----
+    function ptShowView(view) {
+      ['pt-loginView','pt-registerView','pt-setupView','pt-panelView'].forEach(id => {
+        document.getElementById(id).style.display = (id === view) ? 'block' : 'none';
+      });
+      const titleEl = document.getElementById('pt-title');
+      const subEl = document.getElementById('pt-sub');
+      if (view === 'pt-loginView') {
+        titleEl.textContent = 'Iniciar sesión';
+        subEl.textContent = 'Ingresá para ver el monitor de signos vitales del paciente en tiempo real.';
+      } else if (view === 'pt-registerView') {
+        titleEl.textContent = 'Registrarse';
+        subEl.textContent = 'Creá tu cuenta para asociarla a tu perfil de paciente.';
+      } else if (view === 'pt-setupView') {
+        titleEl.textContent = 'Contanos sobre el paciente';
+        subEl.textContent = 'Esta información se guarda asociada a tu cuenta y se usa para personalizar el monitor y el diagnóstico automático.';
+      } else {
+        titleEl.textContent = 'Panel del paciente';
+        subEl.textContent = 'Monitor en tiempo real de los signos vitales del paciente.';
+      }
+    }
+    function ptShowRegister() { ptShowView('pt-registerView'); }
+    function ptShowLogin() { ptShowView('pt-loginView'); }
+
+    // ---- Sesión y usuarios (demo, guardado en el navegador) ----
+    function ptGetUsers() {
+      try { return JSON.parse(localStorage.getItem('moon_users') || '{}'); } catch (e) { return {}; }
+    }
+    function ptSaveUsers(users) { localStorage.setItem('moon_users', JSON.stringify(users)); }
+    function ptGetSession() {
+      try { return JSON.parse(sessionStorage.getItem('moon_session') || 'null'); } catch (e) { return null; }
+    }
+    function ptSetSession(s) { sessionStorage.setItem('moon_session', JSON.stringify(s)); }
+    function ptLogout() {
+      sessionStorage.removeItem('moon_session');
+      ptRefreshNavLabel();
+      ptShowView('pt-loginView');
+    }
+
+    // ---- Perfiles de paciente (por email) ----
+    function ptGetProfiles() {
+      try { return JSON.parse(localStorage.getItem('moon_patient_profiles') || '{}'); } catch (e) { return {}; }
+    }
+    function ptSaveProfiles(profiles) { localStorage.setItem('moon_patient_profiles', JSON.stringify(profiles)); }
+    function ptGetMyProfile() {
+      const session = ptGetSession();
+      if (!session) return null;
+      return ptGetProfiles()[session.email] || null;
+    }
+    function ptSaveMyProfile(profile) {
+      const session = ptGetSession();
+      if (!session) return;
+      const profiles = ptGetProfiles();
+      profiles[session.email] = profile;
+      ptSaveProfiles(profiles);
+    }
+
+    // ---- Formularios de login / registro ----
+    document.getElementById('pt-registerForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const name = document.getElementById('pt-regName').value.trim();
+      const email = document.getElementById('pt-regEmail').value.trim().toLowerCase();
+      const pass = document.getElementById('pt-regPass').value;
+      const errorEl = document.getElementById('pt-registerError');
+
+      if (!name || !email || pass.length < 6) {
+        errorEl.textContent = 'Completá todos los campos (contraseña de 6+ caracteres).';
+        errorEl.style.display = 'block';
+        return;
+      }
+      const users = ptGetUsers();
+      if (users[email]) {
+        errorEl.textContent = 'Ya existe una cuenta con ese email.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      users[email] = { name: name, pass: pass };
+      ptSaveUsers(users);
+      ptSetSession({ email: email, name: name });
+      ptRefreshNavLabel();
+      ptRouteAfterAuth();
+    });
+
+    document.getElementById('pt-loginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const email = document.getElementById('pt-loginEmail').value.trim().toLowerCase();
+      const pass = document.getElementById('pt-loginPass').value;
+      const errorEl = document.getElementById('pt-loginError');
+
+      const users = ptGetUsers();
+      const user = users[email];
+      if (!user || user.pass !== pass) {
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+      ptSetSession({ email: email, name: user.name });
+      ptRefreshNavLabel();
+      ptRouteAfterAuth();
+    });
+
+    // ---- Enfermedades del formulario de alta (reutiliza el array "diseases" de la demo) ----
+    let ptSetupActive = new Set();
+    let patientActive = new Set();
+
+    function ptRenderSetupPills() {
+      const el = document.getElementById('pt-setupDiseasePills');
+      el.innerHTML = diseases.map(d =>
+        `<span class="pm-disease-pill ${ptSetupActive.has(d.id)?'active':''}" onclick="ptToggleSetupDis('${d.id}')">${d.label}</span>`
+      ).join('');
+    }
+    function ptToggleSetupDis(id) {
+      ptSetupActive.has(id) ? ptSetupActive.delete(id) : ptSetupActive.add(id);
+      ptRenderSetupPills();
+    }
+    function ptRenderDiseaseBadges() {
+      const badgesEl = document.getElementById('pt-disease-badges');
+      badgesEl.innerHTML = [...patientActive].map(id => {
+        const d = diseases.find(x => x.id === id);
+        return d ? `<span class="pm-badge ${d.badge}">${d.label}</span>` : '';
+      }).join('') || '<span style="font-size:12px;color:var(--text-dim);">Ninguna registrada</span>';
+    }
+
+    function ptShowSetup(existing) {
+      ptShowView('pt-setupView');
+      ptSetupActive = new Set(existing ? existing.diseases : []);
+      ptRenderSetupPills();
+      if (existing) {
+        document.getElementById('pt-pName').value = existing.name || '';
+        document.getElementById('pt-pAge').value = existing.age || '';
+        document.getElementById('pt-pGender').value = existing.gender || '';
+        document.getElementById('pt-pOtras').value = existing.otras || '';
+        document.getElementById('pt-setupSpo2').value = existing.vitals.spo2;
+        document.getElementById('pt-setupBpm').value = existing.vitals.bpm;
+        document.getElementById('pt-setupTemp').value = existing.vitals.temp;
+        document.getElementById('pt-setupSpo2Show').textContent = existing.vitals.spo2 + ' %';
+        document.getElementById('pt-setupBpmShow').textContent = existing.vitals.bpm + ' bpm';
+        document.getElementById('pt-setupTempShow').textContent = parseFloat(existing.vitals.temp).toFixed(1) + ' °C';
+      } else {
+        document.getElementById('pt-setupForm').reset();
+      }
+    }
+
+    function ptShowPanel(profile) {
+      ptShowView('pt-panelView');
+      const session = ptGetSession();
+      document.getElementById('pt-hello').textContent = session ? ('Sesión: ' + session.email) : '';
+
+      patientActive = new Set(profile.diseases);
+      ptRenderDiseaseBadges();
+
+      const initials = profile.name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+      document.getElementById('pt-avatar').textContent = initials || '--';
+      document.getElementById('pt-name').textContent = profile.name;
+      document.getElementById('pt-meta').textContent = `${profile.age} años · ${profile.gender} · Uso de MOON activo`;
+
+      document.getElementById('pt-spo2-ctrl').value = profile.vitals.spo2;
+      document.getElementById('pt-bpm-ctrl').value = profile.vitals.bpm;
+      document.getElementById('pt-temp-ctrl').value = profile.vitals.temp;
+
+      const otrasBox = document.getElementById('pt-otrasBox');
+      if (profile.otras && profile.otras.trim()) {
+        otrasBox.style.display = 'block';
+        document.getElementById('pt-otrasText').textContent = profile.otras;
+      } else {
+        otrasBox.style.display = 'none';
+      }
+      ptUpdate();
+    }
+
+    function ptEditProfile() { ptShowSetup(ptGetMyProfile()); }
+
+    document.getElementById('pt-setupForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const name = document.getElementById('pt-pName').value.trim();
+      const age = document.getElementById('pt-pAge').value;
+      const gender = document.getElementById('pt-pGender').value;
+      const otras = document.getElementById('pt-pOtras').value.trim();
+      const errorEl = document.getElementById('pt-setupError');
+
+      if (!name || !age || !gender) {
+        errorEl.textContent = 'Completá nombre, edad y género.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+
+      const profile = {
+        name: name, age: age, gender: gender,
+        diseases: [...ptSetupActive],
+        otras: otras,
+        vitals: {
+          spo2: parseFloat(document.getElementById('pt-setupSpo2').value),
+          bpm: parseInt(document.getElementById('pt-setupBpm').value),
+          temp: parseFloat(document.getElementById('pt-setupTemp').value)
+        },
+        updatedAt: new Date().toISOString()
+      };
+      ptSaveMyProfile(profile);
+      ptShowPanel(profile);
+    });
+
+    // ---- Lógica del monitor del panel (misma que la demo, con nombres "pt*") ----
+    function ptUpdate() {
+      const spo2 = parseFloat(document.getElementById('pt-spo2-ctrl').value);
+      const bpm = parseInt(document.getElementById('pt-bpm-ctrl').value);
+      const temp = parseFloat(document.getElementById('pt-temp-ctrl').value);
+
+      document.getElementById('pt-spo2-show').textContent = spo2 + ' %';
+      document.getElementById('pt-bpm-show').textContent = bpm + ' bpm';
+      document.getElementById('pt-temp-show').textContent = temp.toFixed(1) + ' °C';
+      document.getElementById('pt-val-spo2').textContent = spo2;
+      document.getElementById('pt-val-bpm').textContent = bpm;
+      document.getElementById('pt-val-temp').textContent = temp.toFixed(1);
+
+      let spo2State, bpmState, tempState;
+      if (spo2 < 90) spo2State = 'danger'; else if (spo2 < 95) spo2State = 'warning'; else spo2State = 'ok';
+
+      const hasArritmia = patientActive.has('arritmia');
+      if (bpm < 50 || bpm > 120) bpmState = 'danger';
+      else if (bpm < 60 || bpm > 100 || hasArritmia) bpmState = 'warning';
+      else bpmState = 'ok';
+
+      if (temp >= 39) tempState = 'danger';
+      else if (temp >= 37.5) tempState = 'warning';
+      else if (temp < 35.5) tempState = 'danger';
+      else tempState = 'ok';
+
+      ptSetVital('spo2', spo2State, ((spo2-80)/20)*100, spo2State==='ok'?'#639922':spo2State==='warning'?'#EF9F27':'#E24B4A');
+      ptSetVital('bpm', bpmState, Math.min(((bpm-30)/150)*100,100), bpmState==='ok'?'#639922':bpmState==='warning'?'#EF9F27':'#E24B4A');
+      ptSetVital('temp', tempState, Math.min(((temp-34)/8)*100,100), tempState==='ok'?'#639922':tempState==='warning'?'#EF9F27':'#E24B4A');
+
+      const profile = ptGetMyProfile();
+      if (profile) {
+        profile.vitals = { spo2, bpm, temp };
+        ptSaveMyProfile(profile);
+      }
+      ptBuildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
+    }
+
+    function ptSetVital(id, state, pct, color) {
+      const card = document.getElementById('pt-card-'+id);
+      const icon = document.getElementById('pt-icon-'+id);
+      const bar = document.getElementById('pt-bar-'+id);
+      const statusEl = document.getElementById('pt-status-'+id);
+      card.className = 'pm-vital ' + state;
+      icon.className = 'pm-vital-icon ' + state;
+      bar.style.width = Math.round(pct) + '%';
+      bar.style.background = color;
+      const labels = {
+        spo2: { ok:'Normal', warning:'Bajo', danger:'Crítico' },
+        bpm: { ok:'Normal', warning:'Irregular', danger:'Crítico' },
+        temp: { ok:'Normal', warning:'Fiebre', danger:'Peligroso' }
+      };
+      statusEl.textContent = labels[id][state];
+      statusEl.className = 'pm-vital-status status-'+state;
+    }
+
+    function ptBuildDiags(spo2, s0, bpm, sb, temp, st) {
+      const diags = [];
+
+      if (st === 'danger' && temp >= 39) {
+        diags.push({ cls:'danger', icon:'ti-flame', title:'Fiebre alta', body:`Temperatura de ${temp.toFixed(1)} °C. Riesgo de convulsiones. Se recomienda asistencia médica inmediata.` });
+      } else if (st === 'warning') {
+        diags.push({ cls:'warning', icon:'ti-thermometer', title:'Fiebre leve', body:`Temperatura de ${temp.toFixed(1)} °C. Mantener hidratado al paciente y monitorear cada 30 minutos.` });
+      } else if (st === 'danger' && temp < 35.5) {
+        diags.push({ cls:'danger', icon:'ti-snowflake', title:'Hipotermia', body:`Temperatura de ${temp.toFixed(1)} °C, por debajo del rango seguro. Requiere atención inmediata.` });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-temperature', title:'Temperatura normal', body:`Temperatura de ${temp.toFixed(1)} °C dentro del rango fisiológico (35.5–37.4 °C).` });
+      }
+
+      if (s0 === 'danger') {
+        const msg = patientActive.has('epoc') || patientActive.has('asma')
+          ? `SpO₂ ${spo2}%. En pacientes con EPOC/Asma, esto representa insuficiencia respiratoria severa.`
+          : `SpO₂ ${spo2}%. Hipoxemia grave. Requiere oxígeno suplementario de emergencia.`;
+        diags.push({ cls:'danger', icon:'ti-urgent', title:'Hipoxemia grave', body: msg });
+      } else if (s0 === 'warning') {
+        const msg = patientActive.has('anemia')
+          ? `SpO₂ ${spo2}%. En pacientes con anemia, la capacidad de transporte de O₂ ya está comprometida. Monitorear.`
+          : `SpO₂ ${spo2}%. Saturación baja. Asegurarse de que el sensor esté bien colocado y observar evolución.`;
+        diags.push({ cls:'warning', icon:'ti-droplet', title:'Saturación baja', body: msg });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-droplet', title:'Oxigenación normal', body:`SpO₂ ${spo2}%, dentro del rango seguro (95–100%).` });
+      }
+
+      if (sb === 'danger') {
+        if (bpm > 120) diags.push({ cls:'danger', icon:'ti-heart-off', title:'Taquicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. Riesgo de fallo cardíaco. Actuar de inmediato.` });
+        else diags.push({ cls:'danger', icon:'ti-heart-off', title:'Bradicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. El corazón no bombea suficiente sangre. Atención urgente.` });
+      } else if (sb === 'warning') {
+        const msg = patientActive.has('arritmia')
+          ? `BPM: ${bpm}. En pacientes con arritmia, cualquier variación fuera del rango habitual requiere atención.`
+          : patientActive.has('hta')
+            ? `BPM: ${bpm}. En pacientes con hipertensión, la frecuencia elevada aumenta el riesgo cardiovascular.`
+            : `Frecuencia cardíaca de ${bpm} bpm. Levemente fuera del rango ideal (60–100 bpm). Monitorear.`;
+        diags.push({ cls:'warning', icon:'ti-heart-rate-monitor', title:'Frecuencia irregular', body: msg });
+      } else {
+        diags.push({ cls:'ok', icon:'ti-heart-rate-monitor', title:'Ritmo cardíaco normal', body:`Frecuencia de ${bpm} bpm dentro del rango normal.` });
+      }
+
+      if (patientActive.has('epoc') && spo2 < 95) {
+        diags.push({ cls:'warning', icon:'ti-lungs', title:'Alerta EPOC', body:'La SpO₂ baja combinada con EPOC indica posible exacerbación. Evaluar broncodilatador.' });
+      }
+      if (patientActive.has('diabetes') && temp >= 38) {
+        diags.push({ cls:'warning', icon:'ti-droplet-half-2', title:'Alerta Diabetes + Fiebre', body:'En pacientes diabéticos, la fiebre eleva la glucosa y aumenta riesgo de descompensación. Monitorear glucemia.' });
+      }
+      if (patientActive.has('hta') && bpm > 100) {
+        diags.push({ cls:'warning', icon:'ti-gauge', title:'Alerta Hipertensión', body:'La taquicardia en pacientes hipertensos puede indicar crisis hipertensiva. Medir presión arterial.' });
+      }
+
+      const el = document.getElementById('pt-diags');
+      el.innerHTML = diags.map(d =>
+        `<div class="pm-diag diag-${d.cls}">
+          <i class="ti ${d.icon} pm-diag-icon ${d.cls}" aria-hidden="true"></i>
+          <div>
+            <div class="pm-diag-head">${d.title}</div>
+            <div class="pm-diag-body">${d.body}</div>
+          </div>
+        </div>`
+      ).join('');
+    }
+
+    // ---- Ruteo según sesión / perfil existente ----
+    function ptRouteAfterAuth() {
+      const session = ptGetSession();
+      if (!session) { ptShowView('pt-loginView'); return; }
+      const profile = ptGetMyProfile();
+      if (profile) ptShowPanel(profile); else ptShowSetup(null);
+    }
+    function ptRefreshNavLabel() {
+      const navLink = document.getElementById('nav-pacientes');
+      const session = ptGetSession();
+      if (navLink) navLink.textContent = session ? 'Mi panel' : 'Pacientes';
+    }
+
+    // ---- Punto de entrada de la sección Pacientes ----
+    ptRefreshNavLabel();
+    ptRouteAfterAuth();
+  </script>
+
+</body>
+</html>
