@@ -59,10 +59,15 @@
       height: 64px;
     }
     .nav-logo {
+      display: flex; align-items: center; gap: 0.6rem;
       font-family: 'Space Grotesk', sans-serif;
       font-size: 1.4rem; font-weight: 700; letter-spacing: 0.2em;
       color: var(--blue);
       text-decoration: none;
+    }
+    .nav-logo-icon {
+      width: 30px; height: auto;
+      flex-shrink: 0;
     }
     .nav-links { display: flex; align-items: center; gap: 1.4rem; list-style: none; }
     .nav-links a {
@@ -275,7 +280,10 @@
 
   <!-- NAV -->
   <nav>
-    <a class="nav-logo" href="#">MOON</a>
+    <a class="nav-logo" href="#">
+      <img src="logo-glass.png" alt="" class="nav-logo-icon" aria-hidden="true">
+      MOON
+    </a>
     <ul class="nav-links">
       <li class="nav-user" id="navUser"></li>
       <li id="navLogoutWrap" style="display:none;"><button class="nav-logout" onclick="ptLogout()">Cerrar sesión</button></li>
