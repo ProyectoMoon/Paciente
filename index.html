@@ -230,6 +230,26 @@
       100% { box-shadow: 0 0 0 0 rgba(99,153,34,0); }
     }
 
+    /* ---- DEMO INTERACTIVA (controles de simulación dentro del panel) ---- */
+    .pm-demo-box {
+      background: var(--color-background-secondary);
+      border: 1px dashed var(--color-border-secondary);
+      border-radius: var(--border-radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .pm-demo-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+    .pm-demo-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--moon); display: flex; align-items: center; gap: 8px; }
+    .pm-demo-tag { font-size: 11px; font-weight: 500; color: var(--text-dim); background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); padding: 3px 10px; border-radius: 20px; }
+    .pm-ctrl-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pm-ctrl-row:last-of-type { margin-bottom: 0; }
+    .pm-ctrl-label { font-size: 13px; color: var(--color-text-secondary); width: 140px; flex-shrink: 0; }
+    .pm-ctrl-row input[type=range] { flex: 1; min-width: 100px; accent-color: #3a5599; }
+    .pm-ctrl-val { font-size: 14px; font-weight: 500; color: var(--color-text-primary); min-width: 62px; text-align: right; }
+    .pm-demo-diseases { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border-tertiary); }
+    .pm-demo-diseases-label { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+    .pm-demo-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+
     .pm-vitals-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 1rem; }
     .pm-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
     .pm-vital { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.1rem 1.25rem; position: relative; overflow: hidden; transition: border-color 0.2s; }
@@ -270,10 +290,23 @@
     }
     .pm-disease-pill.active { background: #1e2840; color: #8fa8c8; border-color: #3a5599; }
 
+    .pm-alert-toast {
+      display: none;
+      align-items: center; gap: 10px;
+      background: rgba(226,75,74,0.12);
+      border: 1px solid var(--danger);
+      color: #f2a3a2;
+      font-size: 12.5px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+
     @media (max-width: 640px) {
       .nav-links { gap: 0.9rem; }
       .pt-card { padding: 1.5rem; }
       .pt-form-grid { grid-template-columns: 1fr; }
+      .pm-ctrl-label { width: 110px; }
     }
   </style>
 </head>
@@ -394,6 +427,11 @@
         <button class="pt-ghost-btn" onclick="ptEditProfile()"><i class="ti ti-edit"></i> Editar perfil</button>
       </div>
 
+      <div class="pm-alert-toast" id="pt-alert-toast">
+        <i class="ti ti-mail-forward" aria-hidden="true"></i>
+        <span id="pt-alert-toast-text">Alerta enviada a tu email por un signo vital fuera de rango.</span>
+      </div>
+
       <div class="pm-root">
         <div class="pm-patient">
           <div class="pm-avatar" id="pt-avatar">--</div>
@@ -410,6 +448,34 @@
         <div class="pm-live-row">
           <span class="pm-live-dot" id="pt-live-dot"></span>
           <span id="pt-live-text">Pulsera MOON conectada — datos en tiempo real</span>
+        </div>
+
+        <!-- DEMO INTERACTIVA -->
+        <div class="pm-demo-box">
+          <div class="pm-demo-head">
+            <span class="pm-demo-title"><i class="ti ti-adjustments" aria-hidden="true"></i> Demo interactiva</span>
+            <span class="pm-demo-tag">Simula los datos de la pulsera</span>
+          </div>
+          <div class="pm-ctrl-row">
+            <span class="pm-ctrl-label"><i class="ti ti-droplet" aria-hidden="true"></i> SpO₂ (%)</span>
+            <input type="range" id="demo-spo2" min="80" max="100" step="1" value="97" oninput="ptDemoUpdate()">
+            <span class="pm-ctrl-val" id="demo-spo2-show">97 %</span>
+          </div>
+          <div class="pm-ctrl-row">
+            <span class="pm-ctrl-label"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i> BPM</span>
+            <input type="range" id="demo-bpm" min="30" max="180" step="1" value="78" oninput="ptDemoUpdate()">
+            <span class="pm-ctrl-val" id="demo-bpm-show">78 bpm</span>
+          </div>
+          <div class="pm-ctrl-row">
+            <span class="pm-ctrl-label"><i class="ti ti-temperature" aria-hidden="true"></i> Temperatura</span>
+            <input type="range" id="demo-temp" min="34" max="42" step="0.1" value="36.8" oninput="ptDemoUpdate()">
+            <span class="pm-ctrl-val" id="demo-temp-show">36.8 °C</span>
+          </div>
+
+          <div class="pm-demo-diseases">
+            <div class="pm-demo-diseases-label">Enfermedades a simular (no modifica el perfil guardado):</div>
+            <div class="pm-demo-pills" id="demo-disease-pills"></div>
+          </div>
         </div>
 
         <div class="pm-vitals-title">Signos vitales</div>
@@ -453,18 +519,20 @@
     /* ==========================================================================
        MOON – Panel del paciente
        Login / registro / alta del paciente / panel de signos vitales.
-       Los signos vitales NO se simulan: esta pantalla está pensada para
-       recibir los datos reales de la pulsera (sensor ESP32 con SpO2, BPM y
-       temperatura). Mientras no haya un backend conectado, se muestran los
-       últimos valores recibidos (guardados en el navegador).
+
+       Esta versión incluye la DEMO INTERACTIVA (los sliders de SpO2, BPM y
+       temperatura, igual que en la página principal) directamente dentro del
+       panel del paciente. Cada vez que se mueve un slider se llama a
+       ptSetLiveVitals(), la misma función que usaría la pulsera real, así que
+       la demo dispara exactamente la misma alarma por email que ya estaba
+       programada (ptSendAlertEmail) cuando algún signo vital entra en "danger".
 
        -------------------------------------------------------------------
-       CONEXIÓN CON LA PULSERA (a implementar):
+       CONEXIÓN CON LA PULSERA REAL (a implementar más adelante):
        Cuando tengas el backend / API / WebSocket de la pulsera ESP32 listo,
-       llamá a la función ptSetLiveVitals(spo2, bpm, temp) cada vez que
+       podés seguir llamando a ptSetLiveVitals(spo2, bpm, temp) cada vez que
        lleguen datos nuevos del sensor, por ejemplo:
 
-         // Ejemplo con fetch a un endpoint propio:
          async function pollSensor() {
            const res = await fetch('https://tu-backend.com/api/vitales/' + session.email);
            const data = await res.json(); // { spo2, bpm, temp }
@@ -472,12 +540,8 @@
          }
          setInterval(pollSensor, 3000);
 
-         // O con WebSocket:
-         const ws = new WebSocket('wss://tu-backend.com/ws');
-         ws.onmessage = (ev) => {
-           const data = JSON.parse(ev.data);
-           ptSetLiveVitals(data.spo2, data.bpm, data.temp);
-         };
+       Podés dejar la demo activa igual, o esconderla (display:none en
+       .pm-demo-box) una vez que la pulsera esté enviando datos reales.
        ========================================================================== */
 
     // ==== CONFIGURACIÓN DE EMAILJS (alertas automáticas al mail del usuario logueado) ====
@@ -488,6 +552,15 @@
 
     let alertaEnviando = false;
     let lastVitalsState = null; // 'ok' | 'warning' | 'danger'
+
+    function ptShowAlertToast(text) {
+      const toast = document.getElementById('pt-alert-toast');
+      if (!toast) return;
+      document.getElementById('pt-alert-toast-text').textContent = text;
+      toast.style.display = 'flex';
+      clearTimeout(ptShowAlertToast._t);
+      ptShowAlertToast._t = setTimeout(() => { toast.style.display = 'none'; }, 6000);
+    }
 
     function ptSendAlertEmail(spo2, bpm, temp) {
       const session = ptGetSession();
@@ -505,8 +578,16 @@
       };
 
       emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params)
-        .then(() => { console.log('Alerta enviada automáticamente a', session.email); alertaEnviando = false; })
-        .catch((err) => { console.error('Error al enviar la alerta:', err); alertaEnviando = false; });
+        .then(() => {
+          console.log('Alerta enviada automáticamente a', session.email);
+          ptShowAlertToast('Alerta enviada a ' + session.email + ' por un signo vital crítico.');
+          alertaEnviando = false;
+        })
+        .catch((err) => {
+          console.error('Error al enviar la alerta:', err);
+          ptShowAlertToast('Se detectó un valor crítico, pero el envío del mail falló.');
+          alertaEnviando = false;
+        });
     }
 
     // ---- Enfermedades disponibles ----
@@ -520,7 +601,7 @@
     ];
 
     let ptSetupActive = new Set();
-    let patientActive = new Set();
+    let patientActive = new Set(); // enfermedades del perfil guardado (se usan para el diagnóstico)
 
     // ---- Vistas ----
     function ptShowView(view) {
@@ -646,6 +727,7 @@
 
       patientActive = new Set(profile.diseases);
       ptRenderDiseaseBadges();
+      ptRenderDemoPills();
 
       const initials = profile.name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
       document.getElementById('pt-avatar').textContent = initials || '--';
@@ -660,14 +742,16 @@
         otrasBox.style.display = 'none';
       }
 
-      // Muestra el último valor recibido del sensor (guardado en el navegador).
-      // Si todavía no llegó ningún dato real, se ve "Esperando datos..." en vez de un número inventado.
+      // Muestra el último valor recibido (o el de la demo). Si nunca hubo
+      // datos, arranca la demo con los valores por defecto de los sliders
+      // para que el panel no quede vacío.
       lastVitalsState = null; // se resetea al entrar al panel, para poder re-detectar una emergencia activa
       if (profile.vitals && profile.vitals.spo2 != null) {
-        ptRenderVitals(profile.vitals.spo2, profile.vitals.bpm, profile.vitals.temp);
-      } else {
-        ptRenderWaiting();
+        document.getElementById('demo-spo2').value = profile.vitals.spo2;
+        document.getElementById('demo-bpm').value = profile.vitals.bpm;
+        document.getElementById('demo-temp').value = profile.vitals.temp;
       }
+      ptDemoUpdate();
     }
 
     function ptEditProfile() { ptShowSetup(ptGetMyProfile()); }
@@ -692,31 +776,45 @@
         name: name, age: age, gender: gender,
         diseases: [...ptSetupActive],
         otras: otras,
-        vitals: existing ? existing.vitals : null, // se completa con datos reales de la pulsera
+        vitals: existing ? existing.vitals : null, // se completa con datos reales (o de la demo)
         updatedAt: new Date().toISOString()
       };
       ptSaveMyProfile(profile);
       ptShowPanel(profile);
     });
 
-    // ---- Estado "esperando datos" (sin pulsera conectada todavía) ----
-    function ptRenderWaiting() {
-      document.getElementById('pt-live-dot').style.background = '#5a6478';
-      document.getElementById('pt-live-dot').style.animation = 'none';
-      document.getElementById('pt-live-text').textContent = 'Esperando datos de la pulsera...';
-      ['spo2','bpm','temp'].forEach(id => {
-        document.getElementById('pt-val-'+id).textContent = '--';
-        document.getElementById('pt-card-'+id).className = 'pm-vital';
-        document.getElementById('pt-icon-'+id).className = 'pm-vital-icon';
-        document.getElementById('pt-bar-'+id).style.width = '0%';
-        document.getElementById('pt-status-'+id).textContent = '';
-        document.getElementById('pt-status-'+id).className = 'pm-vital-status';
-      });
-      document.getElementById('pt-diags').innerHTML =
-        '<div class="pm-diag diag-ok"><i class="ti ti-info-circle pm-diag-icon ok" aria-hidden="true"></i><div><div class="pm-diag-head">Sin datos todavía</div><div class="pm-diag-body">En cuanto la pulsera envíe la primera lectura de SpO₂, frecuencia cardíaca y temperatura, vas a ver el diagnóstico automático acá.</div></div></div>';
+    // ---- DEMO INTERACTIVA: pills de enfermedades para probar el diagnóstico ----
+    // No modifica el perfil guardado del paciente, solo el estado usado para calcular el diagnóstico en vivo.
+    function ptRenderDemoPills() {
+      const el = document.getElementById('demo-disease-pills');
+      if (!el) return;
+      el.innerHTML = diseases.map(d =>
+        `<span class="pm-disease-pill ${patientActive.has(d.id)?'active':''}" onclick="ptToggleDemoDis('${d.id}')">${d.label}</span>`
+      ).join('');
+    }
+    function ptToggleDemoDis(id) {
+      patientActive.has(id) ? patientActive.delete(id) : patientActive.add(id);
+      ptRenderDemoPills();
+      ptRenderDiseaseBadges();
+      ptDemoUpdate();
     }
 
-    // ---- Renderiza signos vitales reales (llamar desde la integración con el sensor) ----
+    // ---- DEMO INTERACTIVA: sliders de SpO2 / BPM / temperatura ----
+    // Llama a ptSetLiveVitals(), la misma ruta que usaría la pulsera real,
+    // así que dispara el mismo cálculo de diagnóstico y la misma alarma por email.
+    function ptDemoUpdate() {
+      const spo2 = parseFloat(document.getElementById('demo-spo2').value);
+      const bpm = parseInt(document.getElementById('demo-bpm').value, 10);
+      const temp = parseFloat(document.getElementById('demo-temp').value);
+
+      document.getElementById('demo-spo2-show').textContent = spo2 + ' %';
+      document.getElementById('demo-bpm-show').textContent = bpm + ' bpm';
+      document.getElementById('demo-temp-show').textContent = temp.toFixed(1) + ' °C';
+
+      ptSetLiveVitals(spo2, bpm, temp);
+    }
+
+    // ---- Renderiza signos vitales reales (llamar desde la integración con el sensor, o desde la demo) ----
     function ptSetLiveVitals(spo2, bpm, temp) {
       const profile = ptGetMyProfile();
       if (!profile) return;
@@ -754,6 +852,8 @@
       ptBuildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
 
       // ---- Disparo de alerta automática por mail al usuario logueado ----
+      // Se dispara una sola vez por cada "entrada" en estado danger (no en cada movimiento del slider
+      // mientras se sigue en danger), igual que con datos reales de la pulsera.
       const overallState = [spo2State, bpmState, tempState].includes('danger') ? 'danger' : 'ok';
       if (overallState === 'danger' && lastVitalsState !== 'danger') {
         ptSendAlertEmail(spo2, bpm, temp);
