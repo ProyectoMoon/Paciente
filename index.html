@@ -7,6 +7,7 @@
   <title>MOON – Panel del Paciente</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -479,6 +480,35 @@
          };
        ========================================================================== */
 
+    // ==== CONFIGURACIÓN DE EMAILJS (alertas automáticas al mail del usuario logueado) ====
+    const EMAILJS_SERVICE_ID = 'service_w2r8stx';
+    const EMAILJS_TEMPLATE_ID = 'template_5w0va9e';
+    const EMAILJS_PUBLIC_KEY = 'N9FKmH8nhfya8L5d7';
+    if (window.emailjs) { emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); }
+
+    let alertaEnviando = false;
+    let lastVitalsState = null; // 'ok' | 'warning' | 'danger'
+
+    function ptSendAlertEmail(spo2, bpm, temp) {
+      const session = ptGetSession();
+      if (!session || !session.email) return; // sin sesión, no hay a quién avisar
+      if (alertaEnviando) return;
+      alertaEnviando = true;
+
+      const params = {
+        to_email: session.email,
+        bpm: bpm,
+        spo2: spo2,
+        temp: Number(temp).toFixed(1),
+        caida: 'No',
+        fecha: new Date().toLocaleString('es-AR')
+      };
+
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, params)
+        .then(() => { console.log('Alerta enviada automáticamente a', session.email); alertaEnviando = false; })
+        .catch((err) => { console.error('Error al enviar la alerta:', err); alertaEnviando = false; });
+    }
+
     // ---- Enfermedades disponibles ----
     const diseases = [
       { id: 'hta', label: 'Hipertensión', badge: 'pm-badge-warn' },
@@ -632,6 +662,7 @@
 
       // Muestra el último valor recibido del sensor (guardado en el navegador).
       // Si todavía no llegó ningún dato real, se ve "Esperando datos..." en vez de un número inventado.
+      lastVitalsState = null; // se resetea al entrar al panel, para poder re-detectar una emergencia activa
       if (profile.vitals && profile.vitals.spo2 != null) {
         ptRenderVitals(profile.vitals.spo2, profile.vitals.bpm, profile.vitals.temp);
       } else {
@@ -721,6 +752,13 @@
       ptSetVital('temp', tempState, Math.min(((temp-34)/8)*100,100), tempState==='ok'?'#639922':tempState==='warning'?'#EF9F27':'#E24B4A');
 
       ptBuildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
+
+      // ---- Disparo de alerta automática por mail al usuario logueado ----
+      const overallState = [spo2State, bpmState, tempState].includes('danger') ? 'danger' : 'ok';
+      if (overallState === 'danger' && lastVitalsState !== 'danger') {
+        ptSendAlertEmail(spo2, bpm, temp);
+      }
+      lastVitalsState = overallState;
     }
 
     function ptSetVital(id, state, pct, color) {
