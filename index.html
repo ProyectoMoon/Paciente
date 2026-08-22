@@ -313,7 +313,7 @@
         <div class="divider-line">o</div>
         <div class="pt-switch">¿No tenés cuenta? <button type="button" onclick="ptShowView('pt-registerView')">Crear una cuenta →</button></div>
       </div>
-      <p class="hint-box" style="margin-top:1.6rem;">Demo del proyecto MOON — los datos se guardan solo en tu navegador.</p>
+      <p class="hint-box" style="margin-top:1.6rem;">Los datos se guardan solo en tu navegador.</p>
     </div>
 
     <!-- REGISTRO -->
@@ -457,6 +457,12 @@
        temperatura). Mientras no haya un backend conectado, se muestran los
        últimos valores recibidos (guardados en el navegador).
 
+       La sesión se guarda con localStorage (no sessionStorage), por lo que
+       queda iniciada en ese navegador aunque se cierre la pestaña o el
+       navegador y se vuelva a abrir. Al estar en localStorage, es local a
+       cada navegador/dispositivo: no se comparte con el navegador de otra
+       persona, y cada quien tiene que iniciar sesión en el suyo.
+
        -------------------------------------------------------------------
        CONEXIÓN CON LA PULSERA (a implementar):
        Cuando tengas el backend / API / WebSocket de la pulsera ESP32 listo,
@@ -506,11 +512,14 @@
     }
     function ptSaveUsers(users) { localStorage.setItem('moon_users', JSON.stringify(users)); }
     function ptGetSession() {
-      try { return JSON.parse(sessionStorage.getItem('moon_session') || 'null'); } catch (e) { return null; }
+      // localStorage (no sessionStorage): la sesión queda guardada en este
+      // navegador aunque se cierre la pestaña/ventana, y no se comparte con
+      // el navegador de otra persona.
+      try { return JSON.parse(localStorage.getItem('moon_session') || 'null'); } catch (e) { return null; }
     }
-    function ptSetSession(s) { sessionStorage.setItem('moon_session', JSON.stringify(s)); }
+    function ptSetSession(s) { localStorage.setItem('moon_session', JSON.stringify(s)); }
     function ptLogout() {
-      sessionStorage.removeItem('moon_session');
+      localStorage.removeItem('moon_session');
       document.getElementById('navUser').textContent = '';
       ptShowView('pt-loginView');
     }
