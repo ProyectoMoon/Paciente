@@ -109,6 +109,41 @@
       z-index: -1;
     }
 
+    /* ---- FONDO ANIMADO: pulso cardíaco ---- */
+    .pt-ecg-bg {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      z-index: -2;
+      pointer-events: none;
+    }
+    .pt-ecg-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 200%;
+      height: 160px;
+      transform: translateY(-50%);
+      animation: pt-ecg-scroll 2.4s linear infinite;
+      opacity: 0.42;
+      filter: drop-shadow(0 0 6px rgba(143,168,200,0.55));
+    }
+    .pt-ecg-line polyline {
+      fill: none;
+      stroke: var(--moon);
+      stroke-width: 3.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+    @keyframes pt-ecg-scroll {
+      from { transform: translate(0, -50%); }
+      to { transform: translate(-50%, -50%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pt-ecg-line { animation: none; }
+    }
+
     .section-label {
       font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
       color: var(--blue-light); margin-bottom: 0.75rem;
@@ -335,6 +370,20 @@
   </style>
 </head>
 <body>
+
+  <!-- FONDO: pulso cardíaco animado -->
+  <div class="pt-ecg-bg" aria-hidden="true">
+    <svg class="pt-ecg-line" viewBox="0 0 800 160" preserveAspectRatio="none">
+      <polyline points="
+        0,80  18,80  30,68  42,80  52,80  60,92  68,12  76,116  85,80  95,80  110,63  125,80  133.33,80
+        151.33,80  163.33,68  175.33,80  185.33,80  193.33,92  201.33,12  209.33,116  218.33,80  228.33,80  243.33,63  258.33,80  266.66,80
+        284.66,80  296.66,68  308.66,80  318.66,80  326.66,92  334.66,12  342.66,116  351.66,80  361.66,80  376.66,63  391.66,80  399.99,80
+        418,80  430,68  442,80  452,80  460,92  468,12  476,116  485,80  495,80  510,63  525,80  533.33,80
+        551.33,80  563.33,68  575.33,80  585.33,80  593.33,92  601.33,12  609.33,116  618.33,80  628.33,80  643.33,63  658.33,80  666.66,80
+        684.66,80  696.66,68  708.66,80  718.66,80  726.66,92  734.66,12  742.66,116  751.66,80  761.66,80  776.66,63  791.66,80  799.99,80
+      "/>
+    </svg>
+  </div>
 
   <!-- NAV -->
   <nav>
@@ -591,6 +640,8 @@
         document.getElementById(id).style.display = (id === view) ? 'block' : 'none';
       });
       document.getElementById('navLogoutWrap').style.display = (view === 'pt-panelView') ? 'block' : 'none';
+      const ecgBg = document.querySelector('.pt-ecg-bg');
+      if (ecgBg) ecgBg.style.display = (view === 'pt-panelView') ? 'none' : 'block';
     }
 
     // ---- Sesión y usuarios (demo, guardado en el navegador) ----
