@@ -14,6 +14,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -319,6 +320,32 @@
     }
     .pm-disease-pill.active { background: #1e2840; color: #8fa8c8; border-color: #3a5599; }
 
+    /* ---- Caja de conexión Bluetooth ---- */
+    .pm-connect-box {
+      background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8rem;
+    }
+    .pm-connect-title { font-size: 13.5px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .pm-connect-status { font-size: 12px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 8px; }
+    .pm-connect-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+    .pm-connect-dot.on { background: #639922; box-shadow: 0 0 0 0 rgba(99,153,34,0.6); animation: pmPulse 1.8s infinite; }
+    .pm-connect-dot.connecting { background: #EF9F27; }
+    .pm-connect-dot.off { background: var(--text-dim); }
+    .pm-connect-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ---- Caja de emergencia ---- */
+    .pm-emerg-box {
+      margin-top: 1.6rem; background: rgba(226,75,74,0.06); border: 1px solid rgba(226,75,74,0.35);
+      border-radius: var(--border-radius-lg); padding: 1.25rem 1.4rem; transition: background 0.3s, border-color 0.3s;
+    }
+    .pm-emerg-box.active { background: rgba(226,75,74,0.14); border-color: var(--danger); }
+    .pm-emerg-sub { font-size: 12.5px; color: var(--color-text-secondary); margin-bottom: 1rem; }
+    .pm-emerg-auto { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--color-text-secondary); margin-bottom: 1rem; cursor: pointer; }
+    .pm-emerg-auto input { width: 15px; height: 15px; accent-color: var(--danger); cursor: pointer; }
+    .pm-emerg-btn { margin-top: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .pm-emerg-status { font-size: 12px; color: var(--text-muted); margin-top: 0.8rem; text-align: center; min-height: 16px; }
+
     @media (max-width: 640px) {
       .nav-links { gap: 0.9rem; }
       .pt-card { padding: 1.5rem; }
@@ -488,6 +515,14 @@
             <input type="text" id="pt-pOtras" placeholder="Ej: alergia a la penicilina, marcapasos, etc.">
           </div>
 
+          <div class="pt-subtitle">Contacto de emergencia</div>
+          <div class="pt-form-grid">
+            <div class="pt-field pt-field-full">
+              <label for="pt-pEmergEmail">Email que recibe las alertas de emergencia</label>
+              <input type="email" id="pt-pEmergEmail" placeholder="familiar@email.com">
+            </div>
+          </div>
+
           <button type="submit" class="pt-btn" style="margin-top:1.6rem;">Guardar y ver panel del paciente</button>
         </form>
       </div>
@@ -504,6 +539,22 @@
       </div>
 
       <div class="pm-root">
+
+        <!-- CONEXIÓN BLUETOOTH -->
+        <div class="pm-connect-box" id="pt-bleBox">
+          <div class="pm-connect-info">
+            <div class="pm-connect-title"><i class="ti ti-bluetooth"></i> Pulsera MOON (Bluetooth)</div>
+            <div class="pm-connect-status" id="pt-bleStatus">
+              <span class="pm-connect-dot off" id="pt-bleDot"></span>
+              <span id="pt-bleStatusText">Sin conectar</span>
+            </div>
+          </div>
+          <div class="pm-connect-actions">
+            <button class="pt-ghost-btn" id="pt-bleConnectBtn" onclick="ptConnectBluetooth()"><i class="ti ti-bluetooth"></i> Conectar dispositivo</button>
+            <button class="pt-ghost-btn danger" id="pt-bleDisconnectBtn" onclick="ptDisconnectBluetooth()" style="display:none;"><i class="ti ti-plug-x"></i> Desconectar</button>
+          </div>
+        </div>
+
         <div class="pm-patient">
           <div class="pm-avatar" id="pt-avatar">--</div>
           <div class="pm-patient-info">
@@ -553,6 +604,25 @@
           <div style="font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Otras condiciones relevantes</div>
           <div style="font-size:13px; color:var(--color-text-secondary);" id="pt-otrasText"></div>
         </div>
+
+        <!-- SISTEMA DE EMERGENCIA -->
+        <div class="pm-emerg-box" id="pt-emergBox">
+          <div class="pm-emerg-head">
+            <div>
+              <div class="pm-diag-title" style="margin-bottom:4px;"><i class="ti ti-alert-triangle-filled" style="color:var(--danger);"></i> Alerta de emergencia</div>
+              <div class="pm-emerg-sub" id="pt-emergSub">Envía un email de emergencia cada 10 segundos mientras esté activa.</div>
+            </div>
+          </div>
+          <label class="pm-emerg-auto">
+            <input type="checkbox" id="pt-emergAuto" checked>
+            <span>Activar automáticamente si un signo vital pasa a estado crítico</span>
+          </label>
+          <button class="pt-btn pm-emerg-btn" id="pt-emergBtn" onclick="ptToggleEmergency()" style="background:var(--danger);">
+            <i class="ti ti-phone-outgoing"></i> Enviar alerta de emergencia
+          </button>
+          <div class="pm-emerg-status" id="pt-emergStatusText"></div>
+        </div>
+
       </div>
     </div>
 
@@ -657,6 +727,8 @@
     }
     function ptSetSession(s) { localStorage.setItem('moon_session', JSON.stringify(s)); }
     function ptLogout() {
+      ptStopEmergency();
+      ptDisconnectBluetooth();
       localStorage.removeItem('moon_session');
       document.getElementById('navUser').textContent = '';
       ptShowView('pt-loginView');
@@ -755,6 +827,7 @@
         document.getElementById('pt-pAge').value = existing.age || '';
         document.getElementById('pt-pGender').value = existing.gender || '';
         document.getElementById('pt-pOtras').value = existing.otras || '';
+        document.getElementById('pt-pEmergEmail').value = existing.emergEmail || '';
       } else {
         document.getElementById('pt-setupForm').reset();
       }
@@ -799,6 +872,7 @@
       const age = document.getElementById('pt-pAge').value;
       const gender = document.getElementById('pt-pGender').value;
       const otras = document.getElementById('pt-pOtras').value.trim();
+      const emergEmail = document.getElementById('pt-pEmergEmail').value.trim();
       const errorEl = document.getElementById('pt-setupError');
       const submitBtn = e.target.querySelector('.pt-btn');
 
@@ -815,6 +889,7 @@
         name: name, age: age, gender: gender,
         diseases: [...ptSetupActive],
         otras: otras,
+        emergEmail: emergEmail,
         vitals: existing ? existing.vitals : null, // se completa con datos reales de la pulsera
         updatedAt: new Date().toISOString()
       };
@@ -875,6 +950,13 @@
       ptSetVital('temp', tempState, Math.min(((temp-34)/8)*100,100), tempState==='ok'?'#639922':tempState==='warning'?'#EF9F27':'#E24B4A');
 
       ptBuildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
+
+      // Disparo automático de la alerta de emergencia si algún signo está en estado crítico.
+      const autoBox = document.getElementById('pt-emergAuto');
+      const anyDanger = (spo2State === 'danger' || bpmState === 'danger' || tempState === 'danger');
+      if (autoBox && autoBox.checked && anyDanger && !emergencyInterval) {
+        ptStartEmergency(true);
+      }
     }
 
     function ptSetVital(id, state, pct, color) {
@@ -956,6 +1038,204 @@
           </div>
         </div>`
       ).join('');
+    }
+
+    // ==========================================================================
+    // CONFIGURACIÓN — completá estos valores
+    // ==========================================================================
+    const MOON_CONFIG = {
+      // EmailJS (https://www.emailjs.com) — plan gratis, permite enviar emails
+      // desde una página web sin backend propio.
+      emailjsPublicKey:  'TU_PUBLIC_KEY',   // Account > General > Public Key
+      emailjsServiceId:  'TU_SERVICE_ID',   // Email Services > tu servicio
+      emailjsTemplateId: 'TU_TEMPLATE_ID',  // Email Templates > tu template
+      // Email por defecto que recibe la alerta si el paciente no configuró uno propio.
+      emergencyEmailFallback: 'contacto@ejemplo.com',
+
+      // Bluetooth (Web Bluetooth API) — deben coincidir EXACTAMENTE con los UUID
+      // que programes en el firmware del ESP32-C3 (ver comentario más abajo).
+      bluetoothNamePrefix: 'MOON',
+      bluetoothServiceUUID: '12345678-1234-1234-1234-123456789abc',
+      bluetoothCharacteristicUUID: '87654321-4321-4321-4321-cba987654321',
+    };
+
+    // ==========================================================================
+    // BLUETOOTH (Web Bluetooth API) — ESP32-C3 + MAX30102 + MPU6050
+    // --------------------------------------------------------------------------
+    // Al tocar "Conectar dispositivo" el navegador abre su propio menú nativo
+    // con la lista de dispositivos Bluetooth cercanos que coincidan con el
+    // filtro (nombre que empiece con "MOON"). Ahí el usuario elige la pulsera.
+    //
+    // El ESP32-C3 debe funcionar como servidor BLE (BLE, no Bluetooth clásico)
+    // y anunciar un Service con una Characteristic que notifique un string
+    // JSON cada vez que el MAX30102 y el MPU6050 tengan una lectura nueva, ej:
+    //   {"spo2":97,"bpm":78,"temp":36.5,"fall":false}
+    // "fall" es opcional: true si el MPU6050 detecta una caída brusca (usado
+    // para disparar la alerta de emergencia automáticamente).
+    //
+    // Firmware de referencia (Arduino, librería NimBLE-Arduino) en el archivo
+    // esp32_moon_firmware.ino que te dejo aparte.
+    // ==========================================================================
+    let bleDevice = null;
+    let bleCharacteristic = null;
+
+    async function ptConnectBluetooth() {
+      if (!navigator.bluetooth) {
+        alert('Este navegador no soporta Web Bluetooth. Usá Chrome o Edge en Android/PC (en iOS no está disponible).');
+        return;
+      }
+      try {
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: MOON_CONFIG.bluetoothNamePrefix }],
+          optionalServices: [MOON_CONFIG.bluetoothServiceUUID]
+        });
+
+        ptSetBleStatus('connecting', 'Conectando con ' + bleDevice.name + '...');
+        bleDevice.addEventListener('gattserverdisconnected', ptOnBleDisconnected);
+
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(MOON_CONFIG.bluetoothServiceUUID);
+        bleCharacteristic = await service.getCharacteristic(MOON_CONFIG.bluetoothCharacteristicUUID);
+
+        await bleCharacteristic.startNotifications();
+        bleCharacteristic.addEventListener('characteristicvaluechanged', ptOnBleData);
+
+        ptSetBleStatus('on', 'Conectado a ' + bleDevice.name);
+        document.getElementById('pt-bleConnectBtn').style.display = 'none';
+        document.getElementById('pt-bleDisconnectBtn').style.display = 'inline-flex';
+      } catch (err) {
+        console.error('Bluetooth error:', err);
+        if (err.name !== 'NotFoundError') { // el usuario canceló el menú, no es un error real
+          ptSetBleStatus('off', 'Error al conectar: ' + err.message);
+        } else {
+          ptSetBleStatus('off', 'Sin conectar');
+        }
+      }
+    }
+
+    function ptDisconnectBluetooth() {
+      if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect(); // dispara ptOnBleDisconnected solo
+      } else {
+        ptOnBleDisconnected();
+      }
+    }
+
+    function ptOnBleDisconnected() {
+      bleCharacteristic = null;
+      ptSetBleStatus('off', 'Sin conectar');
+      document.getElementById('pt-bleConnectBtn').style.display = 'inline-flex';
+      document.getElementById('pt-bleDisconnectBtn').style.display = 'none';
+    }
+
+    function ptSetBleStatus(state, text) {
+      const dot = document.getElementById('pt-bleDot');
+      dot.className = 'pm-connect-dot ' + state;
+      document.getElementById('pt-bleStatusText').textContent = text;
+    }
+
+    function ptOnBleData(event) {
+      try {
+        const value = event.target.value;
+        const text = new TextDecoder('utf-8').decode(value);
+        const data = JSON.parse(text);
+        if (data.spo2 != null && data.bpm != null && data.temp != null) {
+          ptSetLiveVitals(data.spo2, data.bpm, data.temp);
+        }
+        // Caída detectada por el MPU6050 -> alerta de emergencia inmediata.
+        if (data.fall === true) {
+          ptStartEmergency(true, 'Posible caída detectada por el sensor MPU6050.');
+        }
+      } catch (e) {
+        console.warn('Dato Bluetooth no es JSON válido:', e);
+      }
+    }
+
+    // ==========================================================================
+    // SISTEMA DE EMERGENCIA — envía un email cada 10 segundos mientras esté activo
+    // --------------------------------------------------------------------------
+    // Usa EmailJS (https://www.emailjs.com) para mandar el email directamente
+    // desde el navegador, sin necesidad de un servidor propio. Pasos:
+    //   1. Crear cuenta gratis en emailjs.com
+    //   2. "Email Services" -> conectar tu Gmail/Outlook -> copiar el Service ID
+    //   3. "Email Templates" -> crear uno con variables como
+    //      {{patient_name}} {{age}} {{spo2}} {{bpm}} {{temp}} {{time}} {{message}}
+    //      -> copiar el Template ID
+    //   4. "Account" -> copiar la Public Key
+    //   5. Pegar los 3 valores en MOON_CONFIG más arriba
+    // ==========================================================================
+    let emergencyInterval = null;
+    let emergencySentCount = 0;
+
+    if (window.emailjs && MOON_CONFIG.emailjsPublicKey !== 'TU_PUBLIC_KEY') {
+      emailjs.init({ publicKey: MOON_CONFIG.emailjsPublicKey });
+    }
+
+    function ptToggleEmergency() {
+      if (emergencyInterval) ptStopEmergency();
+      else ptStartEmergency(false);
+    }
+
+    function ptStartEmergency(isAuto, extraMessage) {
+      if (emergencyInterval) return; // ya está activa
+      emergencySentCount = 0;
+      ptSendEmergencyEmail(extraMessage || (isAuto ? 'Disparada automáticamente por un signo vital crítico.' : 'Activada manualmente desde el panel.'));
+      emergencyInterval = setInterval(() => ptSendEmergencyEmail(), 10000);
+
+      const btn = document.getElementById('pt-emergBtn');
+      btn.innerHTML = '<i class="ti ti-player-stop-filled"></i> Detener alerta';
+      btn.style.background = '#8a2f2f';
+      document.getElementById('pt-emergBox').classList.add('active');
+    }
+
+    function ptStopEmergency() {
+      if (emergencyInterval) clearInterval(emergencyInterval);
+      emergencyInterval = null;
+      const btn = document.getElementById('pt-emergBtn');
+      if (btn) {
+        btn.innerHTML = '<i class="ti ti-phone-outgoing"></i> Enviar alerta de emergencia';
+        btn.style.background = 'var(--danger)';
+      }
+      const box = document.getElementById('pt-emergBox');
+      if (box) box.classList.remove('active');
+      const statusEl = document.getElementById('pt-emergStatusText');
+      if (statusEl) statusEl.textContent = '';
+    }
+
+    function ptSendEmergencyEmail(extraMessage) {
+      const profile = ptGetMyProfile();
+      const statusEl = document.getElementById('pt-emergStatusText');
+      const now = new Date();
+
+      if (!window.emailjs || MOON_CONFIG.emailjsPublicKey === 'TU_PUBLIC_KEY') {
+        if (statusEl) statusEl.textContent = 'Falta configurar EmailJS en MOON_CONFIG (ver comentarios en el código).';
+        return;
+      }
+
+      const vitals = (profile && profile.vitals) ? profile.vitals : { spo2: '--', bpm: '--', temp: '--' };
+      const params = {
+        patient_name: profile ? profile.name : 'Paciente sin perfil',
+        age: profile ? profile.age : '-',
+        gender: profile ? profile.gender : '-',
+        spo2: vitals.spo2,
+        bpm: vitals.bpm,
+        temp: vitals.temp,
+        time: now.toLocaleString('es-AR'),
+        message: extraMessage || 'Alerta de emergencia activa.',
+        to_email: (profile && profile.emergEmail) ? profile.emergEmail : MOON_CONFIG.emergencyEmailFallback
+      };
+
+      emergencySentCount++;
+      if (statusEl) statusEl.textContent = `Enviando alerta #${emergencySentCount}... (${now.toLocaleTimeString('es-AR')})`;
+
+      emailjs.send(MOON_CONFIG.emailjsServiceId, MOON_CONFIG.emailjsTemplateId, params)
+        .then(() => {
+          if (statusEl) statusEl.textContent = `Alerta #${emergencySentCount} enviada a ${params.to_email} (${now.toLocaleTimeString('es-AR')}). Próxima en 10s.`;
+        })
+        .catch((err) => {
+          console.error('Error enviando email de emergencia:', err);
+          if (statusEl) statusEl.textContent = 'Error al enviar el email de emergencia: ' + (err && err.text ? err.text : 'ver consola.');
+        });
     }
 
     // ---- Ruteo según sesión / perfil existente ----
