@@ -14,7 +14,6 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -368,73 +367,9 @@
       .pt-footer { flex-direction: column; text-align: center; }
       .pt-footer-info { text-align: center; }
     }
-
-    /* ---- Alarma ---- */
-    #pt-alarm-banner {
-      display: none;
-      position: fixed;
-      top: 76px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 300;
-      background: var(--danger);
-      color: #fff;
-      padding: 12px 18px;
-      border-radius: 10px;
-      align-items: center;
-      gap: 12px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      box-shadow: 0 6px 24px rgba(226,75,74,0.45);
-      animation: pt-alarm-flash 1s infinite;
-      max-width: 90vw;
-    }
-    #pt-alarm-banner i { font-size: 1.1rem; flex-shrink: 0; }
-    @keyframes pt-alarm-flash {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.65; }
-    }
-    #pt-alarm-banner button {
-      background: rgba(255,255,255,0.2);
-      border: none;
-      color: #fff;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 0.75rem;
-      white-space: nowrap;
-    }
-    #pt-alarm-banner button:hover { background: rgba(255,255,255,0.35); }
-
-    .pt-alarm-settings {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-top: 0.8rem;
-      flex-wrap: wrap;
-    }
-    .pt-alarm-settings input[type="number"] {
-      width: 70px;
-      background: var(--color-background-secondary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 5px 8px;
-      color: var(--text);
-      font-size: 0.78rem;
-    }
   </style>
 </head>
 <body>
-
-  <!-- Banner de alarma -->
-  <div id="pt-alarm-banner">
-    <i class="ti ti-alert-triangle" aria-hidden="true"></i>
-    <span id="pt-alarm-text">Alerta: el paciente tiene un valor crítico</span>
-    <button onclick="ptSilenceAlarm()">Silenciar 1 min</button>
-  </div>
 
   <!-- FONDO: pulso cardíaco animado -->
   <div class="pt-ecg-bg" aria-hidden="true">
@@ -663,13 +598,6 @@
            const data = JSON.parse(ev.data);
            ptSetLiveVitals(data.spo2, data.bpm, data.temp);
          };
-
-       -------------------------------------------------------------------
-       ALARMA:
-       Cada N segundos (10 por defecto, configurable desde el panel) se
-       revisa el último estado de los signos vitales. Si alguno está en
-       "danger" (crítico), suena un beep y aparece un cartel rojo arriba.
-       Se puede silenciar por 1 minuto con el botón del cartel.
        ========================================================================== */
 
     // ---- Enfermedades disponibles ----
@@ -714,10 +642,6 @@
       document.getElementById('navLogoutWrap').style.display = (view === 'pt-panelView') ? 'block' : 'none';
       const ecgBg = document.querySelector('.pt-ecg-bg');
       if (ecgBg) ecgBg.style.display = (view === 'pt-panelView') ? 'none' : 'block';
-      if (view !== 'pt-panelView') {
-        ptStopAlarmLoop();
-        document.getElementById('pt-alarm-banner').style.display = 'none';
-      }
     }
 
     // ---- Sesión y usuarios (demo, guardado en el navegador) ----
@@ -735,8 +659,6 @@
     function ptLogout() {
       localStorage.removeItem('moon_session');
       document.getElementById('navUser').textContent = '';
-      ptStopAlarmLoop();
-      document.getElementById('pt-alarm-banner').style.display = 'none';
       ptShowView('pt-loginView');
     }
 
@@ -768,13 +690,13 @@
       const submitBtn = e.target.querySelector('.pt-btn');
 
       if (!name || !email || pass.length < 6) {
-        errorEl.textContent = 'Completá todos los campos (contraseña de 6+ caracteres)';
+        errorEl.textContent = 'Completá todos los campos (contraseña de 6+ caracteres).';
         errorEl.style.display = 'block';
         return;
       }
       const users = ptGetUsers();
       if (users[email]) {
-        errorEl.textContent = 'Ya existe una cuenta con ese email';
+        errorEl.textContent = 'Ya existe una cuenta con ese email.';
         errorEl.style.display = 'block';
         return;
       }
@@ -867,9 +789,6 @@
       } else {
         ptRenderWaiting();
       }
-
-      // Arranca el chequeo periódico de la alarma (cada 10 segundos por defecto)
-      ptStartAlarmLoop();
     }
 
     function ptEditProfile() { ptShowSetup(ptGetMyProfile()); }
@@ -884,7 +803,7 @@
       const submitBtn = e.target.querySelector('.pt-btn');
 
       if (!name || !age || !gender) {
-        errorEl.textContent = 'Completá nombre, edad y género';
+        errorEl.textContent = 'Completá nombre, edad y género.';
         errorEl.style.display = 'block';
         return;
       }
@@ -918,7 +837,6 @@
       });
       document.getElementById('pt-diags').innerHTML =
         '<div class="pm-diag diag-ok"><i class="ti ti-info-circle pm-diag-icon ok" aria-hidden="true"></i><div><div class="pm-diag-head">Sin datos todavía</div><div class="pm-diag-body">En cuanto la pulsera envíe la primera lectura de SpO₂, frecuencia cardíaca y temperatura, vas a ver el diagnóstico automático acá.</div></div></div>';
-      ptAlarmState = { spo2: 'ok', bpm: 'ok', temp: 'ok' };
     }
 
     // ---- Renderiza signos vitales reales (llamar desde la integración con el sensor) ----
@@ -975,9 +893,6 @@
       };
       statusEl.textContent = labels[id][state];
       statusEl.className = 'pm-vital-status status-'+state;
-
-      // Guarda el estado para que la alarma lo revise
-      ptAlarmState[id] = state;
     }
 
     function ptBuildDiags(spo2, s0, bpm, sb, temp, st) {
@@ -1041,124 +956,6 @@
           </div>
         </div>`
       ).join('');
-    }
-
-    // ==========================================================================
-    // ALARMA
-    // ==========================================================================
-
-    /* -------------------------------------------------------------------
-       CONFIGURACIÓN DE EMAILJS (necesaria para que el mail se mande solo)
-       1. Creá una cuenta gratis en https://www.emailjs.com
-       2. Agregá un "Email Service" (Gmail, Outlook, etc) y copiá el Service ID
-       3. Creá un "Email Template" con variables como {{titulo}}, {{mensaje}},
-          {{paciente}} y {{destino}} — y copiá el Template ID
-       4. En "Account > General" copiá tu Public Key
-       5. Reemplazá los tres valores de acá abajo
-    ------------------------------------------------------------------- */
-    const EMAILJS_PUBLIC_KEY  = 'TU_PUBLIC_KEY';
-    const EMAILJS_SERVICE_ID  = 'TU_SERVICE_ID';
-    const EMAILJS_TEMPLATE_ID = 'TU_TEMPLATE_ID';
-
-    if (window.emailjs && EMAILJS_PUBLIC_KEY !== 'TU_PUBLIC_KEY') {
-      emailjs.init(EMAILJS_PUBLIC_KEY);
-    }
-
-    function ptGetEmergencyEmail() {
-      // El mail de emergencia es el mismo con el que la persona inició sesión / se registró.
-      const session = ptGetSession();
-      return session ? session.email : '';
-    }
-
-    function ptSendEmergencyEmail(criticos) {
-      const destino = ptGetEmergencyEmail();
-      if (!destino) return; // no hay sesión, no se manda nada
-      if (!window.emailjs || EMAILJS_PUBLIC_KEY === 'TU_PUBLIC_KEY') {
-        console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) para poder mandar el mail.');
-        return;
-      }
-      const profile = ptGetMyProfile();
-      const nombrePaciente = profile ? profile.name : 'Paciente';
-
-      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-        destino: destino,
-        paciente: nombrePaciente,
-        titulo: 'Alerta MOON — valor crítico',
-        mensaje: 'El paciente ' + nombrePaciente + ' presenta un valor crítico en: ' + criticos.join(', ') + '. Por favor revisá su estado.'
-      }).then(() => {
-        console.log('MOON: mail de emergencia enviado');
-      }).catch((err) => {
-        console.error('MOON: error al enviar el mail de emergencia', err);
-      });
-    }
-
-    let ptAlarmState = { spo2: 'ok', bpm: 'ok', temp: 'ok' };
-    let ptAlarmMuted = false;
-    let ptAlarmTimer = null;
-    const ptAlarmSeconds = 10; // fijo por defecto, cada 10 segundos se revisa si hay que mandar el mail
-
-    // Beep simple con Web Audio API (no necesita ningún archivo de sonido)
-    function ptBeep() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.value = 0.18;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        setTimeout(() => {
-          osc.stop();
-          ctx.close();
-        }, 350);
-      } catch (e) {
-        // Si el navegador bloquea el audio hasta que haya una interacción,
-        // el cartel visual igual va a aparecer.
-      }
-    }
-
-    // Se ejecuta cada N segundos: revisa si algún signo vital está en "danger"
-    function ptCheckAlarm() {
-      const banner = document.getElementById('pt-alarm-banner');
-      const textEl = document.getElementById('pt-alarm-text');
-      const criticos = [];
-      if (ptAlarmState.spo2 === 'danger') criticos.push('oxígeno en sangre');
-      if (ptAlarmState.bpm === 'danger') criticos.push('frecuencia cardíaca');
-      if (ptAlarmState.temp === 'danger') criticos.push('temperatura');
-
-      const hayPeligro = criticos.length > 0;
-
-      if (hayPeligro) {
-        textEl.textContent = 'Alerta: valor crítico en ' + criticos.join(', ');
-        banner.style.display = 'flex';
-        if (!ptAlarmMuted) {
-          ptBeep();
-          ptSendEmergencyEmail(criticos); // se manda de nuevo en cada chequeo (10s por defecto) mientras siga en emergencia
-        }
-      } else {
-        banner.style.display = 'none';
-      }
-    }
-
-    function ptStartAlarmLoop() {
-      ptStopAlarmLoop();
-      ptAlarmTimer = setInterval(ptCheckAlarm, ptAlarmSeconds * 1000);
-      ptCheckAlarm(); // chequeo inicial, no hace falta esperar los primeros 10s
-    }
-
-    function ptStopAlarmLoop() {
-      if (ptAlarmTimer) {
-        clearInterval(ptAlarmTimer);
-        ptAlarmTimer = null;
-      }
-    }
-
-    function ptSilenceAlarm() {
-      ptAlarmMuted = true;
-      document.getElementById('pt-alarm-banner').style.display = 'none';
-      setTimeout(() => { ptAlarmMuted = false; }, 60000);
     }
 
     // ---- Ruteo según sesión / perfil existente ----
