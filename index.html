@@ -618,20 +618,6 @@
           <div style="font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Otras condiciones relevantes</div>
           <div style="font-size:13px; color:var(--color-text-secondary);" id="pt-otrasText"></div>
         </div>
-
-        <div class="pt-alarm-settings">
-          <i class="ti ti-bell" aria-hidden="true"></i>
-          <span>Chequeo de alarma cada</span>
-          <input type="number" id="pt-alarmInterval" min="3" value="10">
-          <span>segundos</span>
-          <button type="button" class="pt-ghost-btn" onclick="ptApplyAlarmInterval()">Aplicar</button>
-        </div>
-        <div class="pt-alarm-settings">
-          <i class="ti ti-mail" aria-hidden="true"></i>
-          <span>Mail de emergencia a</span>
-          <input type="email" id="pt-emergencyEmail" placeholder="familiar@email.com" style="width:180px;">
-          <button type="button" class="pt-ghost-btn" onclick="ptSaveEmergencyEmail()">Guardar</button>
-        </div>
       </div>
     </div>
 
@@ -882,10 +868,6 @@
         ptRenderWaiting();
       }
 
-      // Precarga el mail de emergencia guardado (si lo cargaste antes)
-      const emailInput = document.getElementById('pt-emergencyEmail');
-      if (emailInput) emailInput.value = ptGetEmergencyEmail();
-
       // Arranca el chequeo periódico de la alarma (cada 10 segundos por defecto)
       ptStartAlarmLoop();
     }
@@ -1083,20 +1065,14 @@
     }
 
     function ptGetEmergencyEmail() {
-      return localStorage.getItem('moon_emergency_email') || '';
-    }
-    function ptSaveEmergencyEmail() {
-      const val = document.getElementById('pt-emergencyEmail').value.trim();
-      localStorage.setItem('moon_emergency_email', val);
-      const btn = event.target;
-      const original = btn.textContent;
-      btn.textContent = 'Guardado ✓';
-      setTimeout(() => { btn.textContent = original; }, 1500);
+      // El mail de emergencia es el mismo con el que la persona inició sesión / se registró.
+      const session = ptGetSession();
+      return session ? session.email : '';
     }
 
     function ptSendEmergencyEmail(criticos) {
       const destino = ptGetEmergencyEmail();
-      if (!destino) return; // no hay mail configurado, no se manda nada
+      if (!destino) return; // no hay sesión, no se manda nada
       if (!window.emailjs || EMAILJS_PUBLIC_KEY === 'TU_PUBLIC_KEY') {
         console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) para poder mandar el mail.');
         return;
@@ -1119,7 +1095,7 @@
     let ptAlarmState = { spo2: 'ok', bpm: 'ok', temp: 'ok' };
     let ptAlarmMuted = false;
     let ptAlarmTimer = null;
-    let ptAlarmSeconds = 10;
+    const ptAlarmSeconds = 10; // fijo por defecto, cada 10 segundos se revisa si hay que mandar el mail
 
     // Beep simple con Web Audio API (no necesita ningún archivo de sonido)
     function ptBeep() {
@@ -1168,8 +1144,6 @@
 
     function ptStartAlarmLoop() {
       ptStopAlarmLoop();
-      const input = document.getElementById('pt-alarmInterval');
-      if (input) ptAlarmSeconds = parseInt(input.value, 10) || 10;
       ptAlarmTimer = setInterval(ptCheckAlarm, ptAlarmSeconds * 1000);
       ptCheckAlarm(); // chequeo inicial, no hace falta esperar los primeros 10s
     }
@@ -1179,14 +1153,6 @@
         clearInterval(ptAlarmTimer);
         ptAlarmTimer = null;
       }
-    }
-
-    function ptApplyAlarmInterval() {
-      const input = document.getElementById('pt-alarmInterval');
-      let val = parseInt(input.value, 10);
-      if (!val || val < 3) val = 3;
-      input.value = val;
-      ptStartAlarmLoop();
     }
 
     function ptSilenceAlarm() {
