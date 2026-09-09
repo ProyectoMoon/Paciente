@@ -1023,19 +1023,21 @@
        "notify" un texto simple con el formato:  spo2,bpm,temp
        Ejemplo:  characteristic.setValue("97,78,36.6"); characteristic.notify();
 
-       FILTRO POR NOMBRE (pulseras MOON solamente):
+       FILTRO POR SERVICIO (solo el ESP32-C3 de la pulsera):
        El navegador solo va a mostrar en el selector los dispositivos BLE
-       cuyo nombre empiece con "MOON" (namePrefix). Así, al tocar "Conectar",
-       en la ventana del navegador van a aparecer únicamente las pulseras
-       MOON cercanas y no cualquier otro dispositivo Bluetooth (auriculares,
-       parlantes, etc). Para esto, en el código del ESP32-C3 el nombre del
-       dispositivo BLE tiene que empezar con "MOON", por ejemplo:
+       que anuncien el servicio con UUID BLE_SERVICE_UUID. Así, al tocar
+       "Conectar", aparecen únicamente los ESP32-C3 que tengan armado ese
+       servicio y no cualquier otro dispositivo Bluetooth cercano
+       (auriculares, parlantes, etc), sin depender del nombre que le
+       hayas puesto al dispositivo.
 
-         BLEDevice::init("MOON-ESP32");
+       Para que esto funcione, el ESP32-C3 tiene que anunciar el servicio
+       en el advertising (no alcanza con solo crearlo en el GATT server),
+       por ejemplo con la librería BLE de Arduino/Espressif:
 
-       Si en el ESP32 le pusiste otro nombre, cambiá BLE_NAME_PREFIX acá abajo
-       para que coincida (tiene que ser el mismo prefijo, no hace falta el
-       nombre completo).
+         BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+         pAdvertising->addServiceUUID(SERVICE_UUID);
+         pAdvertising->start();
 
        Requisitos para que funcione:
        - Usar Chrome o Edge (Web Bluetooth no anda en Safari ni Firefox)
@@ -1045,7 +1047,6 @@
     ------------------------------------------------------------------- */
     const BLE_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
     const BLE_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-    const BLE_NAME_PREFIX         = 'MOON';
 
     let bleDevice = null;
     let bleCharacteristic = null;
@@ -1097,11 +1098,11 @@
       try {
         ptSetBleUI('connecting', 'Buscando pulseras MOON cercanas...');
         bleDevice = await navigator.bluetooth.requestDevice({
-          // Solo se listan dispositivos cuyo nombre BLE empiece con "MOON",
-          // así en el selector del navegador aparecen únicamente las
-          // pulseras MOON (ESP32-C3) y no otros equipos Bluetooth cercanos.
-          filters: [{ namePrefix: BLE_NAME_PREFIX }],
-          optionalServices: [BLE_SERVICE_UUID]
+          // Solo se listan dispositivos que anuncien el servicio de MOON,
+          // así en el selector del navegador aparecen únicamente los
+          // ESP32-C3 de las pulseras y no otros equipos Bluetooth cercanos,
+          // sin importar el nombre que tengan.
+          filters: [{ services: [BLE_SERVICE_UUID] }]
         });
 
         document.getElementById('pt-ble-name').textContent = bleDevice.name || 'Pulsera MOON';
