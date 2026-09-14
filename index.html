@@ -643,7 +643,7 @@
         <button class="pt-ble-action" id="pt-ble-btn" onclick="ptConnectBluetooth()">
           <i class="ti ti-bluetooth" aria-hidden="true"></i> Conectar
         </button>
-        <div class="pt-ble-hint" id="pt-ble-hint">Solo se muestran las pulseras MOON cercanas · usá Chrome o Edge</div>
+        <div class="pt-ble-hint" id="pt-ble-hint">Elegí tu dispositivo de la lista · usá Chrome o Edge</div>
       </div>
 
       <div class="pm-root">
@@ -951,6 +951,10 @@
 
       // Arranca el chequeo periódico de la alarma (cada 10 segundos por defecto)
       ptStartAlarmLoop();
+
+      // Intenta reconectar solo con la pulsera que se eligió la última vez
+      // para esta cuenta, sin volver a pedir que se elija de la lista.
+      ptTryAutoReconnect();
     }
 
     function ptEditProfile() { ptShowSetup(ptGetMyProfile()); }
@@ -1012,7 +1016,7 @@
     }
 
     // ==========================================================================
-    // BLUETOOTH (ESP32-C3 Super Mini)
+    // BLUETOOTH (cualquier dispositivo, ej. ESP32-C3 Super Mini)
     // ==========================================================================
     /* -------------------------------------------------------------------
        Estos UUID son los del ejemplo estándar de BLE para ESP32 (Arduino/
@@ -1023,33 +1027,62 @@
        "notify" un texto simple con el formato:  spo2,bpm,temp
        Ejemplo:  characteristic.setValue("97,78,36.6"); characteristic.notify();
 
-       FILTRO POR SERVICIO (solo el ESP32-C3 de la pulsera):
-       El navegador solo va a mostrar en el selector los dispositivos BLE
-       que anuncien el servicio con UUID BLE_SERVICE_UUID. Así, al tocar
-       "Conectar", aparecen únicamente los ESP32-C3 que tengan armado ese
-       servicio y no cualquier otro dispositivo Bluetooth cercano
-       (auriculares, parlantes, etc), sin depender del nombre que le
-       hayas puesto al dispositivo.
+       -------------------------------------------------------------------
+       POR QUÉ SE MUESTRAN TODOS LOS DISPOSITIVOS (no solo los que anuncian
+       el servicio de MOON):
 
-       Para que esto funcione, el ESP32-C3 tiene que anunciar el servicio
-       en el advertising (no alcanza con solo crearlo en el GATT server),
-       por ejemplo con la librería BLE de Arduino/Espressif:
+       Web Bluetooth no puede leer el modelo del chip (no existe forma de
+       filtrar "solo ESP32-C3 Super Mini") ni queremos depender del nombre
+       que le pusiste al dispositivo. Por eso se usa acceptAllDevices, que
+       hace que el selector del navegador muestre TODOS los dispositivos
+       Bluetooth cercanos (no solo ESP32) para poder elegir cualquiera sin
+       importar su nombre.
 
-         BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-         pAdvertising->addServiceUUID(SERVICE_UUID);
-         pAdvertising->start();
+       Como contrapartida, el filtro por servicio ya no evita que aparezcan
+       otros dispositivos (auriculares, etc.) en la lista — el usuario es
+       quien elige cuál es su pulsera. Al conectar, el código intenta leer
+       el servicio de MOON; si el dispositivo elegido no lo tiene, se
+       muestra un error y no rompe nada.
 
-       Requisitos para que funcione:
+       RECONEXIÓN AUTOMÁTICA POR CUENTA:
+       Una vez que te conectás con una pulsera, se guarda su identificador
+       en este navegador asociado a tu email. La próxima vez que entres con
+       esa cuenta (en el mismo navegador), se intenta reconectar sola sin
+       tener que elegir de la lista de nuevo. Esto usa
+       navigator.bluetooth.getDevices(), disponible en Chrome/Edge
+       (no funciona en Safari ni Firefox). Si apretás "Desconectar" a
+       propósito, se olvida la pulsera guardada para esa cuenta.
+
+       Requisitos para que el Bluetooth funcione:
        - Usar Chrome o Edge (Web Bluetooth no anda en Safari ni Firefox)
        - La página tiene que estar en HTTPS (GitHub Pages ya lo cumple)
-       - Conectar solo se puede después de tocar el botón (por seguridad
-         del navegador, no se puede conectar solo)
+       - Elegir un dispositivo de la lista solo se puede después de tocar
+         el botón (por seguridad del navegador, no se puede conectar solo
+         la primera vez)
     ------------------------------------------------------------------- */
     const BLE_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
     const BLE_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
     let bleDevice = null;
     let bleCharacteristic = null;
+
+    // ---- Clave de almacenamiento del dispositivo BLE, atada a la cuenta activa ----
+    function ptBleStorageKey() {
+      const session = ptGetSession();
+      return session ? ('moon_ble_device_' + session.email) : null;
+    }
+    function ptSaveBleDeviceId(id) {
+      const key = ptBleStorageKey();
+      if (key) localStorage.setItem(key, id);
+    }
+    function ptGetSavedBleDeviceId() {
+      const key = ptBleStorageKey();
+      return key ? localStorage.getItem(key) : null;
+    }
+    function ptForgetSavedBleDevice() {
+      const key = ptBleStorageKey();
+      if (key) localStorage.removeItem(key);
+    }
 
     // ---- Actualiza la tarjeta de Bluetooth: estado visual (dot, ícono, texto, botón) ----
     function ptSetBleUI(state, statusText, hintText) {
@@ -1090,41 +1123,75 @@
       if (hintText !== undefined) hintEl.textContent = hintText;
     }
 
+    // Pide al usuario que elija CUALQUIER dispositivo Bluetooth cercano
+    // (sin filtrar por nombre ni por servicio), para no depender de cómo
+    // se llame la pulsera.
     async function ptConnectBluetooth() {
       if (!navigator.bluetooth) {
         ptSetBleUI('error', 'Este navegador no soporta Bluetooth', 'Probá con Chrome o Edge en una PC o Android');
         return;
       }
       try {
-        ptSetBleUI('connecting', 'Buscando pulseras MOON cercanas...');
-        bleDevice = await navigator.bluetooth.requestDevice({
-          // Solo se listan dispositivos que anuncien el servicio de MOON,
-          // así en el selector del navegador aparecen únicamente los
-          // ESP32-C3 de las pulseras y no otros equipos Bluetooth cercanos,
-          // sin importar el nombre que tengan.
-          filters: [{ services: [BLE_SERVICE_UUID] }]
+        ptSetBleUI('connecting', 'Buscando dispositivos Bluetooth cercanos...');
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          // optionalServices es necesario para poder acceder a este
+          // servicio después de conectar, aunque no se use como filtro.
+          optionalServices: [BLE_SERVICE_UUID]
         });
+        await ptConnectToDevice(device);
+      } catch (err) {
+        console.error('MOON: error de Bluetooth', err);
+        // El usuario cerró el selector sin elegir ningún dispositivo
+        if (err.name === 'NotFoundError') {
+          ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
+        } else {
+          ptSetBleUI('error', 'No se pudo conectar', err.message);
+        }
+      }
+    }
 
-        document.getElementById('pt-ble-name').textContent = bleDevice.name || 'Pulsera MOON';
-        ptSetBleUI('connecting', 'Conectando con ' + (bleDevice.name || 'la pulsera') + '...');
-        bleDevice.addEventListener('gattserverdisconnected', ptOnBluetoothDisconnected);
+    // Conecta con un dispositivo ya elegido (manualmente o por reconexión
+    // automática) e intenta leer el servicio de MOON.
+    async function ptConnectToDevice(device) {
+      document.getElementById('pt-ble-name').textContent = device.name || 'Dispositivo Bluetooth';
+      ptSetBleUI('connecting', 'Conectando con ' + (device.name || 'el dispositivo') + '...');
+      device.addEventListener('gattserverdisconnected', ptOnBluetoothDisconnected);
 
-        const server = await bleDevice.gatt.connect();
+      try {
+        const server = await device.gatt.connect();
         const service = await server.getPrimaryService(BLE_SERVICE_UUID);
         bleCharacteristic = await service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
 
         await bleCharacteristic.startNotifications();
         bleCharacteristic.addEventListener('characteristicvaluechanged', ptHandleBluetoothData);
 
-        ptSetBleUI('connected', 'Conectada — recibiendo datos', 'Podés alejarte un poco, se avisa si se desconecta');
+        bleDevice = device;
+        ptSaveBleDeviceId(device.id);
+        ptSetBleUI('connected', 'Conectada — recibiendo datos', 'Se va a reconectar sola la próxima vez que entres con esta cuenta');
       } catch (err) {
-        console.error('MOON: error de Bluetooth', err);
-        // El usuario cerró el selector sin elegir ninguna pulsera
-        if (err.name === 'NotFoundError') {
-          ptSetBleUI('idle', 'Sin conectar', 'Solo se muestran las pulseras MOON cercanas · usá Chrome o Edge');
-        } else {
-          ptSetBleUI('error', 'No se pudo conectar', err.message);
+        console.error('MOON: el dispositivo elegido no es compatible', err);
+        if (device.gatt && device.gatt.connected) device.gatt.disconnect();
+        ptSetBleUI('error', 'Ese dispositivo no es una pulsera MOON', 'Elegí otro de la lista · ' + err.message);
+      }
+    }
+
+    // Al entrar al panel, intenta reconectar sola con la última pulsera
+    // usada por esta cuenta, sin volver a pedir que se elija de la lista.
+    // Solo funciona en navegadores que soportan navigator.bluetooth.getDevices()
+    // (Chrome/Edge). En Safari/Firefox simplemente no hace nada.
+    async function ptTryAutoReconnect() {
+      if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+      const savedId = ptGetSavedBleDeviceId();
+      if (!savedId) return;
+      try {
+        const devices = await navigator.bluetooth.getDevices();
+        const found = devices.find(d => d.id === savedId);
+        if (found) {
+          await ptConnectToDevice(found);
         }
+      } catch (err) {
+        console.warn('MOON: no se pudo reconectar automáticamente', err);
       }
     }
 
@@ -1144,13 +1211,18 @@
     }
 
     function ptOnBluetoothDisconnected() {
-      ptSetBleUI('idle', 'Pulsera desconectada', 'Solo se muestran las pulseras MOON cercanas · usá Chrome o Edge');
+      ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
     }
 
+    // Desconexión manual: además de cortar la conexión, se olvida la
+    // pulsera guardada para esta cuenta, así no se intenta reconectar sola
+    // la próxima vez (si el usuario la desconectó a propósito).
     function ptDisconnectBluetooth() {
       if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
         bleDevice.gatt.disconnect();
       }
+      ptForgetSavedBleDevice();
+      ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
     }
 
     function ptRenderVitals(spo2, bpm, temp) {
