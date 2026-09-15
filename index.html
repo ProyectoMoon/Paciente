@@ -1040,9 +1040,16 @@
 
        Como contrapartida, el filtro por servicio ya no evita que aparezcan
        otros dispositivos (auriculares, etc.) en la lista — el usuario es
-       quien elige cuál es su pulsera. Al conectar, el código intenta leer
-       el servicio de MOON; si el dispositivo elegido no lo tiene, se
-       muestra un error y no rompe nada.
+       quien elige cuál es su pulsera.
+
+       CONEXIÓN "SIEMPRE ACEPTADA":
+       Al elegir cualquier dispositivo de la lista, la app se conecta a su
+       GATT server (eso es "estar conectado" por Bluetooth) sin importar si
+       ese dispositivo tiene o no el servicio de datos de MOON. Si además
+       encuentra el servicio/característica de MOON, empieza a recibir
+       signos vitales; si no lo encuentra, queda igual conectado, solo que
+       sin datos en vivo (por ejemplo, hasta que ajustes el UUID en el
+       firmware del ESP32 para que coincida).
 
        RECONEXIÓN AUTOMÁTICA POR CUENTA:
        Una vez que te conectás con una pulsera, se guarda su identificador
@@ -1152,27 +1159,42 @@
     }
 
     // Conecta con un dispositivo ya elegido (manualmente o por reconexión
-    // automática) e intenta leer el servicio de MOON.
+    // automática). CUALQUIER dispositivo BLE que acepte la conexión GATT
+    // queda "conectado" en la app, tenga o no el servicio de datos de MOON.
     async function ptConnectToDevice(device) {
       document.getElementById('pt-ble-name').textContent = device.name || 'Dispositivo Bluetooth';
       ptSetBleUI('connecting', 'Conectando con ' + (device.name || 'el dispositivo') + '...');
       device.addEventListener('gattserverdisconnected', ptOnBluetoothDisconnected);
 
       try {
+        // 1) Conexión GATT real: esto es lo que define si el dispositivo
+        //    queda "conectado" por Bluetooth, y funciona para cualquier
+        //    dispositivo BLE, sea o no una pulsera MOON.
         const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(BLE_SERVICE_UUID);
-        bleCharacteristic = await service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
-
-        await bleCharacteristic.startNotifications();
-        bleCharacteristic.addEventListener('characteristicvaluechanged', ptHandleBluetoothData);
-
         bleDevice = device;
         ptSaveBleDeviceId(device.id);
-        ptSetBleUI('connected', 'Conectada — recibiendo datos', 'Se va a reconectar sola la próxima vez que entres con esta cuenta');
+
+        // 2) Además, intenta encontrar el servicio/característica de MOON
+        //    para poder leer los signos vitales. Si el dispositivo elegido
+        //    no lo tiene (otro ESP32 con otro UUID, u otro dispositivo
+        //    cualquiera), NO se corta la conexión: queda conectado igual,
+        //    solo que sin datos en vivo hasta que ese servicio aparezca.
+        try {
+          const service = await server.getPrimaryService(BLE_SERVICE_UUID);
+          bleCharacteristic = await service.getCharacteristic(BLE_CHARACTERISTIC_UUID);
+          await bleCharacteristic.startNotifications();
+          bleCharacteristic.addEventListener('characteristicvaluechanged', ptHandleBluetoothData);
+
+          ptSetBleUI('connected', 'Conectada — recibiendo datos', 'Se va a reconectar sola la próxima vez que entres con esta cuenta');
+        } catch (serviceErr) {
+          console.warn('MOON: conectado, pero no se encontró el servicio de datos esperado', serviceErr);
+          bleCharacteristic = null;
+          ptSetBleUI('connected', 'Conectada (sin servicio de datos MOON)', 'Revisá el UUID de servicio/característica en el firmware si esperás ver signos vitales');
+        }
       } catch (err) {
-        console.error('MOON: el dispositivo elegido no es compatible', err);
+        console.error('MOON: no se pudo establecer la conexión Bluetooth', err);
         if (device.gatt && device.gatt.connected) device.gatt.disconnect();
-        ptSetBleUI('error', 'Ese dispositivo no es una pulsera MOON', 'Elegí otro de la lista · ' + err.message);
+        ptSetBleUI('error', 'No se pudo conectar', err.message);
       }
     }
 
