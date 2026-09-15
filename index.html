@@ -1023,9 +1023,9 @@
        Espressif). Si en el código del ESP32-C3 usás otros UUID de servicio
        o de característica, cambialos acá para que coincidan exactamente.
 
-       Del lado del ESP32-C3, la característica tiene que mandar por
-       "notify" un texto simple con el formato:  spo2,bpm,temp
-       Ejemplo:  characteristic.setValue("97,78,36.6"); characteristic.notify();
+       Del lado del ESP32-C3, la característica de VITALES tiene que mandar
+       por "notify" un texto simple con el formato:  spo2,bpm,temp
+       Ejemplo:  pVitalsChar->setValue("97,78,36.6"); pVitalsChar->notify();
 
        -------------------------------------------------------------------
        POR QUÉ SE MUESTRAN TODOS LOS DISPOSITIVOS (no solo los que anuncian
@@ -1068,7 +1068,7 @@
          la primera vez)
     ------------------------------------------------------------------- */
     const BLE_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-    const BLE_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+    const BLE_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a9';
 
     let bleDevice = null;
     let bleCharacteristic = null;
