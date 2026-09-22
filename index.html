@@ -394,18 +394,6 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.65; }
     }
-    #pt-alarm-banner button {
-      background: rgba(255,255,255,0.2);
-      border: none;
-      color: #fff;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 0.75rem;
-      white-space: nowrap;
-    }
-    #pt-alarm-banner button:hover { background: rgba(255,255,255,0.35); }
 
     .pt-alarm-settings {
       display: flex;
@@ -493,7 +481,6 @@
   <div id="pt-alarm-banner">
     <i class="ti ti-alert-triangle" aria-hidden="true"></i>
     <span id="pt-alarm-text">Alerta: el paciente tiene un valor crítico</span>
-    <button onclick="ptSilenceAlarm()">Silenciar 1 min</button>
   </div>
 
   <!-- FONDO: pulso cardíaco animado -->
@@ -680,13 +667,6 @@
             <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-bpm" style="width:0%;background:#639922"></div></div>
             <div class="pm-vital-status" id="pt-status-bpm"></div>
           </div>
-          <div class="pm-vital" id="pt-card-temp">
-            <div class="pm-vital-icon" id="pt-icon-temp"><i class="ti ti-temperature" aria-hidden="true"></i></div>
-            <div class="pm-vital-name">Temperatura corporal</div>
-            <div><span class="pm-vital-val" id="pt-val-temp">--</span><span class="pm-vital-unit"> °C</span></div>
-            <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-temp" style="width:0%;background:#639922"></div></div>
-            <div class="pm-vital-status" id="pt-status-temp"></div>
-          </div>
         </div>
 
         <div class="pm-diag-title">Diagnóstico automático</div>
@@ -742,12 +722,25 @@
            ptSetLiveVitals(data.spo2, data.bpm, data.temp);
          };
 
+       NOTA: la temperatura se sigue recibiendo desde la pulsera (formato
+       "spo2,bpm,temp") por compatibilidad con el firmware, pero ya NO se
+       muestra en el panel ni se usa para diagnóstico/alarma — solo se
+       usan SpO2 y BPM.
+
        -------------------------------------------------------------------
        ALARMA:
-       Cada N segundos (10 por defecto, configurable desde el panel) se
-       revisa el último estado de los signos vitales. Si alguno está en
-       "danger" (crítico), suena un beep y aparece un cartel rojo arriba.
-       Se puede silenciar por 1 minuto con el botón del cartel.
+       Cada N segundos (10 por defecto) se revisa el último estado de los
+       signos vitales. Si alguno está en "danger" (crítico), suena un beep
+       y aparece un cartel rojo arriba. La alarma NO se puede silenciar:
+       sigue sonando y reenviando el mail de emergencia en cada chequeo
+       mientras el valor siga siendo crítico.
+
+       -------------------------------------------------------------------
+       DESCONEXIÓN DE LA PULSERA:
+       Al desconectarse (manual o inesperadamente), el panel deja de
+       mostrar los últimos valores recibidos y vuelve al estado
+       "Esperando datos de la pulsera...", y se corta la alarma asociada
+       a esos valores (ya no se considera "en vivo").
        ========================================================================== */
 
     // ---- Enfermedades disponibles ----
@@ -941,13 +934,10 @@
         otrasBox.style.display = 'none';
       }
 
-      // Muestra el último valor recibido del sensor (guardado en el navegador).
-      // Si todavía no llegó ningún dato real, se ve "Esperando datos..." en vez de un número inventado.
-      if (profile.vitals && profile.vitals.spo2 != null) {
-        ptRenderVitals(profile.vitals.spo2, profile.vitals.bpm, profile.vitals.temp);
-      } else {
-        ptRenderWaiting();
-      }
+      // El panel arranca SIEMPRE en "esperando datos": los últimos valores
+      // guardados no se muestran como si fueran en vivo hasta que la
+      // pulsera esté realmente conectada (ver ptTryAutoReconnect más abajo).
+      ptRenderWaiting();
 
       // Arranca el chequeo periódico de la alarma (cada 10 segundos por defecto)
       ptStartAlarmLoop();
@@ -988,12 +978,12 @@
       setTimeout(() => { ptClearLoading(submitBtn); ptShowPanel(profile); }, 300);
     });
 
-    // ---- Estado "esperando datos" (sin pulsera conectada todavía) ----
+    // ---- Estado "esperando datos" (sin pulsera conectada todavía / desconectada) ----
     function ptRenderWaiting() {
       document.getElementById('pt-live-dot').style.background = '#5a6478';
       document.getElementById('pt-live-dot').style.animation = 'none';
       document.getElementById('pt-live-text').textContent = 'Esperando datos de la pulsera...';
-      ['spo2','bpm','temp'].forEach(id => {
+      ['spo2','bpm'].forEach(id => {
         document.getElementById('pt-val-'+id).textContent = '--';
         document.getElementById('pt-card-'+id).className = 'pm-vital';
         document.getElementById('pt-icon-'+id).className = 'pm-vital-icon';
@@ -1002,17 +992,23 @@
         document.getElementById('pt-status-'+id).className = 'pm-vital-status';
       });
       document.getElementById('pt-diags').innerHTML =
-        '<div class="pm-diag diag-ok"><i class="ti ti-info-circle pm-diag-icon ok" aria-hidden="true"></i><div><div class="pm-diag-head">Sin datos todavía</div><div class="pm-diag-body">En cuanto la pulsera envíe la primera lectura de SpO₂, frecuencia cardíaca y temperatura, vas a ver el diagnóstico automático acá.</div></div></div>';
-      ptAlarmState = { spo2: 'ok', bpm: 'ok', temp: 'ok' };
+        '<div class="pm-diag diag-ok"><i class="ti ti-info-circle pm-diag-icon ok" aria-hidden="true"></i><div><div class="pm-diag-head">Sin datos todavía</div><div class="pm-diag-body">En cuanto la pulsera envíe la primera lectura de SpO₂ y frecuencia cardíaca, vas a ver el diagnóstico automático acá.</div></div></div>';
+      // Al no haber datos en vivo, la alarma no debe seguir sonando por
+      // valores viejos: se resetea a "ok" y se oculta el cartel.
+      ptAlarmState = { spo2: 'ok', bpm: 'ok' };
+      document.getElementById('pt-alarm-banner').style.display = 'none';
     }
 
     // ---- Renderiza signos vitales reales (llamar desde la integración con el sensor) ----
+    // NOTA: la pulsera sigue mandando "spo2,bpm,temp" por compatibilidad con
+    // el firmware, pero temp ya no se usa acá (solo se guarda por si se
+    // necesita en el futuro).
     function ptSetLiveVitals(spo2, bpm, temp) {
       const profile = ptGetMyProfile();
       if (!profile) return;
       profile.vitals = { spo2, bpm, temp };
       ptSaveMyProfile(profile);
-      ptRenderVitals(spo2, bpm, temp);
+      ptRenderVitals(spo2, bpm);
     }
 
     // ==========================================================================
@@ -1059,6 +1055,13 @@
        navigator.bluetooth.getDevices(), disponible en Chrome/Edge
        (no funciona en Safari ni Firefox). Si apretás "Desconectar" a
        propósito, se olvida la pulsera guardada para esa cuenta.
+
+       DESCONEXIÓN (manual o inesperada):
+       En ambos casos se dispara el mismo manejador (gattserverdisconnected),
+       que actualiza la tarjeta de Bluetooth a "Sin conectar" Y ADEMÁS
+       vuelve el panel al estado "esperando datos" (ptRenderWaiting), para
+       que no queden mostrándose en pantalla valores viejos como si
+       estuvieran en vivo.
 
        Requisitos para que el Bluetooth funcione:
        - Usar Chrome o Edge (Web Bluetooth no anda en Safari ni Firefox)
@@ -1232,48 +1235,51 @@
       }
     }
 
+    // Se dispara tanto si el usuario desconecta a propósito (botón
+    // "Desconectar") como si la pulsera se apaga / se aleja / pierde señal.
+    // En los dos casos hay que: 1) reflejar "Sin conectar" en la tarjeta BLE,
+    // y 2) volver el panel de signos vitales a "esperando datos" para que no
+    // quede mostrando el último valor recibido como si siguiera en vivo.
     function ptOnBluetoothDisconnected() {
+      bleCharacteristic = null;
       ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
+      ptRenderWaiting();
     }
 
     // Desconexión manual: además de cortar la conexión, se olvida la
     // pulsera guardada para esta cuenta, así no se intenta reconectar sola
     // la próxima vez (si el usuario la desconectó a propósito).
     function ptDisconnectBluetooth() {
-      if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
-        bleDevice.gatt.disconnect();
-      }
       ptForgetSavedBleDevice();
-      ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
+      if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+        // Esto dispara el evento 'gattserverdisconnected' -> ptOnBluetoothDisconnected,
+        // que ya se encarga de actualizar la UI y volver a "esperando datos".
+        bleDevice.gatt.disconnect();
+      } else {
+        // Por si ya estaba desconectado a nivel GATT, igual reseteamos la UI.
+        ptOnBluetoothDisconnected();
+      }
     }
 
-    function ptRenderVitals(spo2, bpm, temp) {
+    function ptRenderVitals(spo2, bpm) {
       document.getElementById('pt-live-dot').style.background = '#639922';
       document.getElementById('pt-live-dot').style.animation = 'pmPulse 1.8s infinite';
       document.getElementById('pt-live-text').textContent = 'Pulsera MOON conectada — datos en tiempo real';
 
       document.getElementById('pt-val-spo2').textContent = spo2;
       document.getElementById('pt-val-bpm').textContent = bpm;
-      document.getElementById('pt-val-temp').textContent = Number(temp).toFixed(1);
 
-      let spo2State, bpmState, tempState;
+      let spo2State, bpmState;
       if (spo2 < 90) spo2State = 'danger'; else if (spo2 < 95) spo2State = 'warning'; else spo2State = 'ok';
 
-      const hasArritmia = patientActive.has('arritmia');
-      if (bpm < 50 || bpm > 120) bpmState = 'danger';
-      else if (bpm < 60 || bpm > 100 || hasArritmia) bpmState = 'warning';
+      if (bpm > 130) bpmState = 'danger';
+      else if (bpm > 100) bpmState = 'warning';
       else bpmState = 'ok';
-
-      if (temp >= 39) tempState = 'danger';
-      else if (temp >= 37.5) tempState = 'warning';
-      else if (temp < 35.5) tempState = 'danger';
-      else tempState = 'ok';
 
       ptSetVital('spo2', spo2State, ((spo2-80)/20)*100, spo2State==='ok'?'#639922':spo2State==='warning'?'#EF9F27':'#E24B4A');
       ptSetVital('bpm', bpmState, Math.min(((bpm-30)/150)*100,100), bpmState==='ok'?'#639922':bpmState==='warning'?'#EF9F27':'#E24B4A');
-      ptSetVital('temp', tempState, Math.min(((temp-34)/8)*100,100), tempState==='ok'?'#639922':tempState==='warning'?'#EF9F27':'#E24B4A');
 
-      ptBuildDiags(spo2, spo2State, bpm, bpmState, temp, tempState);
+      ptBuildDiags(spo2, spo2State, bpm, bpmState);
     }
 
     function ptSetVital(id, state, pct, color) {
@@ -1287,8 +1293,7 @@
       bar.style.background = color;
       const labels = {
         spo2: { ok:'Normal', warning:'Bajo', danger:'Crítico' },
-        bpm: { ok:'Normal', warning:'Irregular', danger:'Crítico' },
-        temp: { ok:'Normal', warning:'Fiebre', danger:'Peligroso' }
+        bpm: { ok:'Normal', warning:'Irregular', danger:'Crítico' }
       };
       statusEl.textContent = labels[id][state];
       statusEl.className = 'pm-vital-status status-'+state;
@@ -1297,18 +1302,8 @@
       ptAlarmState[id] = state;
     }
 
-    function ptBuildDiags(spo2, s0, bpm, sb, temp, st) {
+    function ptBuildDiags(spo2, s0, bpm, sb) {
       const diags = [];
-
-      if (st === 'danger' && temp >= 39) {
-        diags.push({ cls:'danger', icon:'ti-flame', title:'Fiebre alta', body:`Temperatura de ${Number(temp).toFixed(1)} °C. Riesgo de convulsiones. Se recomienda asistencia médica inmediata.` });
-      } else if (st === 'warning') {
-        diags.push({ cls:'warning', icon:'ti-thermometer', title:'Fiebre leve', body:`Temperatura de ${Number(temp).toFixed(1)} °C. Mantener hidratado al paciente y monitorear cada 30 minutos.` });
-      } else if (st === 'danger' && temp < 35.5) {
-        diags.push({ cls:'danger', icon:'ti-snowflake', title:'Hipotermia', body:`Temperatura de ${Number(temp).toFixed(1)} °C, por debajo del rango seguro. Requiere atención inmediata.` });
-      } else {
-        diags.push({ cls:'ok', icon:'ti-temperature', title:'Temperatura normal', body:`Temperatura de ${Number(temp).toFixed(1)} °C dentro del rango fisiológico (35.5–37.4 °C).` });
-      }
 
       if (s0 === 'danger') {
         const msg = patientActive.has('epoc') || patientActive.has('asma')
@@ -1340,9 +1335,6 @@
 
       if (patientActive.has('epoc') && spo2 < 95) {
         diags.push({ cls:'warning', icon:'ti-lungs', title:'Alerta EPOC', body:'La SpO₂ baja combinada con EPOC indica posible exacerbación. Evaluar broncodilatador.' });
-      }
-      if (patientActive.has('diabetes') && temp >= 38) {
-        diags.push({ cls:'warning', icon:'ti-droplet-half-2', title:'Alerta Diabetes + Fiebre', body:'En pacientes diabéticos, la fiebre eleva la glucosa y aumenta riesgo de descompensación. Monitorear glucemia.' });
       }
       if (patientActive.has('hta') && bpm > 100) {
         diags.push({ cls:'warning', icon:'ti-gauge', title:'Alerta Hipertensión', body:'La taquicardia en pacientes hipertensos puede indicar crisis hipertensiva. Medir presión arterial.' });
@@ -1409,10 +1401,14 @@
       });
     }
 
-    let ptAlarmState = { spo2: 'ok', bpm: 'ok', temp: 'ok' };
-    let ptAlarmMuted = false;
+    // Ya no existe "silenciar": mientras el signo vital siga en "danger",
+    // el cartel se muestra, suena el beep y se reenvía el mail en cada
+    // chequeo (cada ptAlarmSeconds segundos), sin forma de detenerlo desde
+    // la interfaz — solo se apaga solo cuando el valor deja de ser crítico
+    // (o la pulsera se desconecta, ver ptRenderWaiting).
+    let ptAlarmState = { spo2: 'ok', bpm: 'ok' };
     let ptAlarmTimer = null;
-    const ptAlarmSeconds = 10; // fijo por defecto, cada 10 segundos se revisa si hay que mandar el mail
+    const ptAlarmSeconds = 10; // cada 10 segundos se revisa y, si corresponde, se manda el mail de nuevo
 
     // Beep simple con Web Audio API (no necesita ningún archivo de sonido)
     function ptBeep() {
@@ -1443,17 +1439,14 @@
       const criticos = [];
       if (ptAlarmState.spo2 === 'danger') criticos.push('oxígeno en sangre');
       if (ptAlarmState.bpm === 'danger') criticos.push('frecuencia cardíaca');
-      if (ptAlarmState.temp === 'danger') criticos.push('temperatura');
 
       const hayPeligro = criticos.length > 0;
 
       if (hayPeligro) {
         textEl.textContent = 'Alerta: valor crítico en ' + criticos.join(', ');
         banner.style.display = 'flex';
-        if (!ptAlarmMuted) {
-          ptBeep();
-          ptSendEmergencyEmail(criticos); // se manda de nuevo en cada chequeo (10s por defecto) mientras siga en emergencia
-        }
+        ptBeep();
+        ptSendEmergencyEmail(criticos); // se manda de nuevo en cada chequeo (10s por defecto) mientras siga en emergencia, sin poder silenciarse
       } else {
         banner.style.display = 'none';
       }
@@ -1470,12 +1463,6 @@
         clearInterval(ptAlarmTimer);
         ptAlarmTimer = null;
       }
-    }
-
-    function ptSilenceAlarm() {
-      ptAlarmMuted = true;
-      document.getElementById('pt-alarm-banner').style.display = 'none';
-      setTimeout(() => { ptAlarmMuted = false; }, 60000);
     }
 
     // ---- Ruteo según sesión / perfil existente ----
