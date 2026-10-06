@@ -473,6 +473,29 @@
       color: var(--text-dim);
       margin-top: 2px;
     }
+
+    /* ---- Detección de caídas ---- */
+    .pt-fall-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.1rem 1.25rem; margin-bottom: 1.5rem; transition: border-color 0.25s; }
+    .pt-fall-card.is-active { border-color: #639922; }
+    .pt-fall-card.is-alert { border-color: #E24B4A; animation: pt-alarm-flash 1s infinite; }
+    .pt-fall-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .pt-fall-icon { width: 42px; height: 42px; border-radius: 50%; background: var(--color-background-secondary); border: 1.5px solid var(--color-border-secondary); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--moon); flex-shrink: 0; }
+    .pt-fall-card.is-active .pt-fall-icon { border-color: #639922; color: #9bd15a; }
+    .pt-fall-card.is-alert .pt-fall-icon { border-color: #E24B4A; color: #f18988; }
+    .pt-fall-info { flex: 1; min-width: 150px; }
+    .pt-fall-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+    .pt-fall-sub { font-size: 12px; color: var(--text-dim); }
+    .pt-fall-metrics { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.9rem; font-size: 12.5px; color: var(--text-muted); }
+    .pt-fall-metrics b { color: var(--text); font-weight: 500; }
+    .pt-fall-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 0.9rem; font-size: 0.78rem; color: var(--text-muted); }
+    .pt-fall-controls select { background: var(--color-background-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 0.78rem; }
+    .pt-fall-dismiss { display: none; background: var(--danger); color: #fff; border: none; font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 600; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+    .pt-toggle { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+    .pt-toggle input { opacity: 0; width: 0; height: 0; }
+    .pt-toggle span { position: absolute; inset: 0; background: var(--border); border-radius: 24px; cursor: pointer; transition: background 0.2s; }
+    .pt-toggle span::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+    .pt-toggle input:checked + span { background: #639922; }
+    .pt-toggle input:checked + span::before { transform: translateX(18px); }
   </style>
 </head>
 <body>
@@ -666,6 +689,35 @@
             <div><span class="pm-vital-val" id="pt-val-bpm">--</span><span class="pm-vital-unit"> bpm</span></div>
             <div class="pm-bar"><div class="pm-bar-fill" id="pt-bar-bpm" style="width:0%;background:#639922"></div></div>
             <div class="pm-vital-status" id="pt-status-bpm"></div>
+          </div>
+        </div>
+
+        <div class="pm-vitals-title">Detección de caídas</div>
+        <div class="pt-fall-card" id="pt-fall-card">
+          <div class="pt-fall-head">
+            <div class="pt-fall-icon" id="pt-fall-icon"><i class="ti ti-user-check" aria-hidden="true"></i></div>
+            <div class="pt-fall-info">
+              <div class="pt-fall-title" id="pt-fall-title">Sin caídas detectadas</div>
+              <div class="pt-fall-sub" id="pt-fall-sub">Esperando datos del acelerómetro...</div>
+            </div>
+            <label class="pt-toggle" title="Activar / desactivar detección">
+              <input type="checkbox" id="pt-fall-enabled" checked onchange="ptToggleFall(this.checked)">
+              <span></span>
+            </label>
+          </div>
+          <div class="pt-fall-metrics">
+            <div>Aceleración: <b id="pt-fall-g">--</b> g</div>
+            <div>Última caída: <b id="pt-fall-last">Ninguna</b></div>
+          </div>
+          <div class="pt-fall-controls">
+            <label for="pt-fall-sens">Sensibilidad</label>
+            <select id="pt-fall-sens">
+              <option value="alta">Alta</option>
+              <option value="media" selected>Media</option>
+              <option value="baja">Baja</option>
+            </select>
+            <button type="button" class="pt-ghost-btn" onclick="ptSimulateFall()"><i class="ti ti-test-pipe"></i> Simular caída</button>
+            <button type="button" class="pt-fall-dismiss" id="pt-fall-dismiss" onclick="ptDismissFall()">Estoy bien (falsa alarma)</button>
           </div>
         </div>
 
@@ -995,8 +1047,10 @@
         '<div class="pm-diag diag-ok"><i class="ti ti-info-circle pm-diag-icon ok" aria-hidden="true"></i><div><div class="pm-diag-head">Sin datos todavía</div><div class="pm-diag-body">En cuanto la pulsera envíe la primera lectura de SpO₂ y frecuencia cardíaca, vas a ver el diagnóstico automático acá.</div></div></div>';
       // Al no haber datos en vivo, la alarma no debe seguir sonando por
       // valores viejos: se resetea a "ok" y se oculta el cartel.
-      ptAlarmState = { spo2: 'ok', bpm: 'ok' };
-      document.getElementById('pt-alarm-banner').style.display = 'none';
+      ptAlarmState = { spo2: 'ok', bpm: 'ok', caida: ptAlarmState.caida || 'ok' };
+      if (ptAlarmState.caida !== 'danger') {
+        document.getElementById('pt-alarm-banner').style.display = 'none';
+      }
     }
 
     // ---- Renderiza signos vitales reales (llamar desde la integración con el sensor) ----
@@ -1221,17 +1275,20 @@
     }
 
     function ptHandleBluetoothData(event) {
-      const value = event.target.value; // DataView
-      const text = new TextDecoder().decode(value);
-      // Formato esperado desde el ESP32-C3: "spo2,bpm,temp" -> ej "97,78,36.6"
+      const text = new TextDecoder().decode(event.target.value);
+      // Formato: "spo2,bpm,temp" o "spo2,bpm,temp,g"
       const partes = text.trim().split(',');
-      if (partes.length === 3) {
+      if (partes.length >= 3) {
         const spo2 = parseFloat(partes[0]);
         const bpm = parseFloat(partes[1]);
         const temp = parseFloat(partes[2]);
         if (!isNaN(spo2) && !isNaN(bpm) && !isNaN(temp)) {
           ptSetLiveVitals(spo2, bpm, temp);
         }
+      }
+      if (partes.length >= 4) {
+        const g = parseFloat(partes[3]);
+        if (!isNaN(g)) ptProcessG(g);
       }
     }
 
@@ -1406,7 +1463,7 @@
     // chequeo (cada ptAlarmSeconds segundos), sin forma de detenerlo desde
     // la interfaz — solo se apaga solo cuando el valor deja de ser crítico
     // (o la pulsera se desconecta, ver ptRenderWaiting).
-    let ptAlarmState = { spo2: 'ok', bpm: 'ok' };
+    let ptAlarmState = { spo2: 'ok', bpm: 'ok', caida: 'ok' };
     let ptAlarmTimer = null;
     const ptAlarmSeconds = 10; // cada 10 segundos se revisa y, si corresponde, se manda el mail de nuevo
 
@@ -1439,6 +1496,7 @@
       const criticos = [];
       if (ptAlarmState.spo2 === 'danger') criticos.push('oxígeno en sangre');
       if (ptAlarmState.bpm === 'danger') criticos.push('frecuencia cardíaca');
+      if (ptAlarmState.caida === 'danger') criticos.push('caída detectada');
 
       const hayPeligro = criticos.length > 0;
 
@@ -1463,6 +1521,111 @@
         clearInterval(ptAlarmTimer);
         ptAlarmTimer = null;
       }
+    }
+
+    // ==========================================================================
+    // DETECCIÓN DE CAÍDAS (acelerómetro MPU6050)
+    // Algoritmo: IMPACTO (g alto) -> espera 1s -> quietud (g ~ 1) = CAÍDA.
+    // Si después del impacto hay movimiento, se descarta.
+    // La pulsera manda la aceleración total en g como 4° dato: "spo2,bpm,temp,g"
+    // ==========================================================================
+    const FALL_CFG = { alta: { impact: 2.0 }, media: { impact: 2.5 }, baja: { impact: 3.0 } };
+    const FALL_WAIT_MS   = 1000;
+    const FALL_STILL_MS  = 4000;
+    const FALL_STILL_TOL = 0.35;
+
+    let fallEnabled = true;
+    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+    let fallSamples = [];
+    let fallImpactTs = 0;
+
+    function ptFallUI(mode, title, sub) {
+      const card = document.getElementById('pt-fall-card');
+      const icon = document.getElementById('pt-fall-icon');
+      card.classList.remove('is-active', 'is-alert');
+      document.getElementById('pt-fall-dismiss').style.display = 'none';
+      if (mode === 'active') {
+        card.classList.add('is-active');
+        icon.innerHTML = '<i class="ti ti-user-check" aria-hidden="true"></i>';
+      } else if (mode === 'alert') {
+        card.classList.add('is-alert');
+        icon.innerHTML = '<i class="ti ti-alert-triangle" aria-hidden="true"></i>';
+        document.getElementById('pt-fall-dismiss').style.display = 'inline-block';
+      } else {
+        icon.innerHTML = '<i class="ti ti-user-check" aria-hidden="true"></i>';
+      }
+      document.getElementById('pt-fall-title').textContent = title;
+      document.getElementById('pt-fall-sub').textContent = sub;
+    }
+
+    function ptToggleFall(on) {
+      fallEnabled = on;
+      if (!on) {
+        fallState = 'idle';
+        ptAlarmState.caida = 'ok';
+        ptFallUI('idle', 'Detección desactivada', 'No se van a detectar caídas');
+        ptCheckAlarm();
+      } else {
+        ptFallUI('idle', 'Sin caídas detectadas', 'Esperando datos del acelerómetro...');
+      }
+    }
+
+    function ptProcessG(g) {
+      if (!fallEnabled) return;
+      document.getElementById('pt-fall-g').textContent = g.toFixed(2);
+      if (fallState === 'alert') return;
+      if (fallState === 'idle') {
+        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+        const umbral = FALL_CFG[document.getElementById('pt-fall-sens').value].impact;
+        if (g >= umbral) {
+          fallState = 'impact';
+          fallImpactTs = Date.now();
+          fallSamples = [];
+          ptFallUI('active', 'Impacto detectado', 'Verificando si la persona se levanta...');
+          setTimeout(ptEvaluateFall, FALL_STILL_MS);
+        }
+      } else if (fallState === 'impact') {
+        if (Date.now() - fallImpactTs > FALL_WAIT_MS) fallSamples.push(g);
+      }
+    }
+
+    function ptEvaluateFall() {
+      if (fallState !== 'impact') return;
+      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
+      if (quieto) ptTriggerFall();
+      else {
+        fallState = 'idle';
+        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+      }
+    }
+
+    function ptTriggerFall() {
+      fallState = 'alert';
+      ptAlarmState.caida = 'danger';
+      const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('pt-fall-last').textContent = 'Hoy ' + hora;
+      ptFallUI('alert', '¡Caída detectada!', 'El paciente no se movió después del impacto');
+      const profile = ptGetMyProfile();
+      if (profile) { profile.lastFall = new Date().toISOString(); ptSaveMyProfile(profile); }
+      ptCheckAlarm();
+    }
+
+    function ptDismissFall() {
+      fallState = 'idle';
+      ptAlarmState.caida = 'ok';
+      ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+      ptCheckAlarm();
+    }
+
+    // Para probar sin tirarte al piso
+    function ptSimulateFall() {
+      if (!fallEnabled || fallState !== 'idle') return;
+      ptProcessG(5.0);
+      let n = 0;
+      const t = setInterval(() => {
+        ptProcessG(1.0 + (Math.random() - 0.5) * 0.1);
+        if (++n >= 40) clearInterval(t);
+      }, 100);
     }
 
     // ---- Ruteo según sesión / perfil existente ----
