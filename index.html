@@ -700,6 +700,8 @@
             <div>Última caída: <b id="pt-fall-last">Ninguna</b></div>
           </div>
           <div class="pt-fall-controls">
+            <!-- TEST: borrar este botón cuando termines de probar -->
+            <button type="button" class="pt-ghost-btn" onclick="ptSimulateFall()"><i class="ti ti-test-pipe"></i> Simular caída</button>
             <button type="button" class="pt-fall-dismiss" id="pt-fall-dismiss" onclick="ptDismissFall()">Estoy bien (falsa alarma)</button>
           </div>
         </div>
@@ -1408,7 +1410,7 @@
     const EMAILJS_PUBLIC_KEY  = 'N9FKmH8nhfya8L5d7';
     const EMAILJS_SERVICE_ID  = 'service_w2r8stx';
     const EMAILJS_TEMPLATE_ID = 'TU_TEMPLATE_ID';
-    
+
     if (window.emailjs && EMAILJS_PUBLIC_KEY !== 'TU_PUBLIC_KEY') {
       emailjs.init(EMAILJS_PUBLIC_KEY);
     }
@@ -1587,6 +1589,17 @@
       const profile = ptGetMyProfile();
       if (profile) { profile.lastFall = new Date().toISOString(); ptSaveMyProfile(profile); }
       ptCheckAlarm();
+    }
+
+    // TEST: simula un impacto + quietud (borrar junto con el botón cuando termines de probar)
+    function ptSimulateFall() {
+      if (fallState !== 'idle') return;
+      ptProcessG(5.0);
+      let n = 0;
+      const t = setInterval(() => {
+        ptProcessG(1.0 + (Math.random() - 0.5) * 0.1);
+        if (++n >= 40) clearInterval(t);
+      }, 100);
     }
 
     function ptDismissFall() {
