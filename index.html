@@ -1598,6 +1598,10 @@
       ptFallUI('alert', '¡Caída detectada!', 'El paciente no se movió después del impacto');
       const profile = ptGetMyProfile();
       if (profile) { profile.lastFall = new Date().toISOString(); ptSaveMyProfile(profile); }
+      // Una caída nueva siempre es un evento nuevo: se salta el tiempo de espera
+      // y manda el mail enseguida. El límite solo frena los reenvíos repetidos
+      // de la MISMA emergencia.
+      ptLastEmailTs = 0;
       ptCheckAlarm();
     }
 
