@@ -588,15 +588,15 @@
       <p class="section-sub">Esta información se guarda asociada a tu cuenta y se usa para personalizar el monitor y el diagnóstico automático de MOON.</p>
       <div class="pt-card">
         <div class="pt-error" id="pt-setupError">Completá los campos obligatorios.</div>
-        <form id="pt-setupForm">
+        <form id="pt-setupForm" autocomplete="off">
           <div class="pt-form-grid">
             <div class="pt-field pt-field-full">
               <label for="pt-pName">Nombre completo del paciente</label>
-              <input type="text" id="pt-pName" placeholder="Ej: Juan García" required>
+              <input type="text" id="pt-pName" placeholder="Ej: Juan García" autocomplete="off" autocorrect="off" spellcheck="false" required>
             </div>
             <div class="pt-field">
               <label for="pt-pAge">Edad</label>
-              <input type="number" id="pt-pAge" min="0" max="120" placeholder="Ej: 72" required>
+              <input type="number" id="pt-pAge" min="0" max="120" placeholder="Ej: 72" autocomplete="off" required>
             </div>
             <div class="pt-field">
               <label for="pt-pGender">Género</label>
@@ -614,7 +614,7 @@
 
           <div class="pt-field pt-field-full" style="margin-top:1.2rem;">
             <label for="pt-pOtras">Otras condiciones relevantes (opcional)</label>
-            <input type="text" id="pt-pOtras" placeholder="Ej: alergia a la penicilina, marcapasos, etc.">
+            <input type="text" id="pt-pOtras" placeholder="Ej: alergia a la penicilina, marcapasos, etc." autocomplete="off">
           </div>
 
           <button type="submit" class="pt-btn" style="margin-top:1.6rem;">Guardar y ver panel del paciente</button>
