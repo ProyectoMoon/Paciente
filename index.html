@@ -1444,7 +1444,6 @@
       const partes = [];
       if (hayCaida) partes.push('El paciente ' + nombrePaciente + ' sufrió una CAÍDA y no se movió después del impacto.');
       if (vitales.length) partes.push('Valor crítico en: ' + vitales.join(', ') + '.');
-      partes.push('Por favor revisá su estado de inmediato.');
 
       emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
         destino: destino,
@@ -1452,6 +1451,10 @@
         email: destino,
         paciente: nombrePaciente,
         name: 'MOON',
+        bpm: document.getElementById('pt-val-bpm').textContent,
+        spo2: document.getElementById('pt-val-spo2').textContent,
+        caida: hayCaida ? 'Sí' : 'No',
+        fecha: new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }),
         titulo: hayCaida ? 'Alerta MOON — caída detectada' : 'Alerta MOON — valor crítico',
         mensaje: partes.join(' ')
       }).then(() => {
