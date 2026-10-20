@@ -1612,14 +1612,14 @@
     }
 
     function ptEvaluateFall() {
-      if (fallState !== 'impact') return;
-      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
-      if (quieto) ptTriggerFall();
-      else {
-        fallState = 'idle';
-        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
-      }
-    }
+  if (fallState !== 'impact') return;
+  const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
+  if (quieto) ptTriggerFall();
+  else {
+    fallState = 'idle';
+    ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+  }
+}
 
     function ptTriggerFall() {
       fallState = 'alert';
