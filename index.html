@@ -1422,44 +1422,71 @@
     // Tiempo mínimo entre mails (para no gastar los 200 mails/mes del plan gratis).
     // Para probar más rápido podés bajarlo, ej: 30 * 1000 (30 segundos).
     const EMAILJS_COOLDOWN_MS = 5 * 60 * 1000;
-    let ptLastEmailTs = 0;
+    let ptLastEmailTs = 0;      // espera entre mails de signos vitales
+    let ptLastFallEmailTs = 0;  // espera propia para mails de caída (independiente de los vitales)
 
-    function ptSendEmergencyEmail(criticos) {
-      const destino = ptGetEmergencyEmail();
-      if (!destino) return; // no hay sesión, no se manda nada
+    // Verifica que haya sesión y que EmailJS esté cargado y configurado
+    function ptEmailListo() {
+      if (!ptGetEmergencyEmail()) return false; // no hay sesión, no se manda nada
       if (!window.emailjs || EMAILJS_PUBLIC_KEY === 'TU_PUBLIC_KEY' || EMAILJS_TEMPLATE_ID === 'TU_TEMPLATE_ID') {
-        console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) para poder mandar el mail.');
-        return;
+        console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) o no cargó la librería.');
+        return false;
       }
-      if (Date.now() - ptLastEmailTs < EMAILJS_COOLDOWN_MS) return;
-      ptLastEmailTs = Date.now();
+      return true;
+    }
+
+    // Datos comunes a todos los mails de emergencia
+    function ptEmailBase(extra) {
+      const destino = ptGetEmergencyEmail();
       const profile = ptGetMyProfile();
-      const nombrePaciente = profile ? profile.name : 'Paciente';
-
-      // Se separan las caídas de los signos vitales para armar un mensaje claro
-      const hayCaida = criticos.includes('caída detectada');
-      const vitales = criticos.filter(c => c !== 'caída detectada');
-      const partes = [];
-      if (hayCaida) partes.push('El paciente ' + nombrePaciente + ' sufrió una CAÍDA y no se movió después del impacto.');
-      if (vitales.length) partes.push('Valor crítico en: ' + vitales.join(', ') + '.');
-
-      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      return Object.assign({
         destino: destino,
         to_email: destino,
         email: destino,
-        paciente: nombrePaciente,
+        paciente: profile ? profile.name : 'Paciente',
         name: 'MOON',
         bpm: document.getElementById('pt-val-bpm').textContent,
         spo2: document.getElementById('pt-val-spo2').textContent,
-        caida: hayCaida ? 'Sí' : 'No',
-        fecha: new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }),
-        titulo: hayCaida ? 'Alerta MOON — caída detectada' : 'Alerta MOON — valor crítico',
-        mensaje: partes.join(' ')
-      }).then(() => {
-        console.log('MOON: mail de emergencia enviado a ' + destino);
+        fecha: new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+      }, extra);
+    }
+
+    // Mail por signos vitales críticos (solo vitales, las caídas tienen su propia función)
+    function ptSendEmergencyEmail(criticos) {
+      if (!ptEmailListo()) return;
+      if (Date.now() - ptLastEmailTs < EMAILJS_COOLDOWN_MS) return;
+      ptLastEmailTs = Date.now();
+
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, ptEmailBase({
+        caida: 'No',
+        titulo: 'Alerta MOON — valor crítico',
+        mensaje: 'Valor crítico en: ' + criticos.join(', ') + '.'
+      })).then(() => {
+        console.log('MOON: mail de signos vitales enviado a ' + ptGetEmergencyEmail());
       }).catch((err) => {
-        console.error('MOON: error al enviar el mail de emergencia', err);
+        console.error('MOON: error al enviar el mail de signos vitales', err);
         ptLastEmailTs = 0; // si falló, permite reintentar en el próximo chequeo
+      });
+    }
+
+    // Mail por caída detectada (con su propio contador de espera)
+    function ptSendFallEmail() {
+      if (!ptEmailListo()) return;
+      if (Date.now() - ptLastFallEmailTs < EMAILJS_COOLDOWN_MS) return;
+      ptLastFallEmailTs = Date.now();
+
+      const profile = ptGetMyProfile();
+      const nombre = profile ? profile.name : 'Paciente';
+
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, ptEmailBase({
+        caida: 'Sí',
+        titulo: 'Alerta MOON — caída detectada',
+        mensaje: 'El paciente ' + nombre + ' sufrió una CAÍDA y no se movió después del impacto.'
+      })).then(() => {
+        console.log('MOON: mail de caída enviado a ' + ptGetEmergencyEmail());
+      }).catch((err) => {
+        console.error('MOON: error al enviar el mail de caída', err);
+        ptLastFallEmailTs = 0; // si falló, permite reintentar en el próximo chequeo
       });
     }
 
@@ -1509,7 +1536,11 @@
         textEl.textContent = 'Alerta: valor crítico en ' + criticos.join(', ');
         banner.style.display = 'flex';
         ptBeep();
-        ptSendEmergencyEmail(criticos); // se manda de nuevo en cada chequeo (10s por defecto) mientras siga en emergencia, sin poder silenciarse
+        // Los mails de vitales y de caída van por separado (cada uno con su propia espera).
+        // Se reenvían en cada chequeo (10s por defecto) respetando esa espera, mientras siga la emergencia.
+        const vitales = criticos.filter(c => c !== 'caída detectada');
+        if (vitales.length) ptSendEmergencyEmail(vitales);
+        if (ptAlarmState.caida === 'danger') ptSendFallEmail();
       } else {
         banner.style.display = 'none';
       }
@@ -1539,7 +1570,7 @@
     const FALL_STILL_MS  = 4000;
     const FALL_STILL_TOL = 0.35;
 
-        let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
     let fallSamples = [];
     let fallImpactTs = 0;
 
@@ -1601,7 +1632,7 @@
       // Una caída nueva siempre es un evento nuevo: se salta el tiempo de espera
       // y manda el mail enseguida. El límite solo frena los reenvíos repetidos
       // de la MISMA emergencia.
-      ptLastEmailTs = 0;
+      ptLastFallEmailTs = 0;
       ptCheckAlarm();
     }
 
