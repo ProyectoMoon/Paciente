@@ -702,6 +702,7 @@
           <div class="pt-fall-controls">
             <button type="button" class="pt-fall-dismiss" id="pt-fall-dismiss" onclick="ptDismissFall()">Estoy bien (falsa alarma)</button>
           </div>
+          <div class="pt-fall-sub" id="pt-fall-debug" style="display:none;margin-top:0.8rem;"></div>
           <div class="pt-fall-sub" id="pt-mail-status" style="display:none;margin-top:0.8rem;"></div>
         </div>
 
@@ -1618,14 +1619,22 @@
     // Si después del impacto hay movimiento, se descarta.
     // La pulsera manda la aceleración total en g como 4° dato: "spo2,bpm,temp,g"
     // ==========================================================================
-    const FALL_IMPACT_G  = 2.5;   // umbral fijo: impacto típico de una caída real (no ajustable)
-    const FALL_WAIT_MS   = 1000;
-    const FALL_STILL_MS  = 4000;
-    const FALL_STILL_TOL = 0.35;
+    const FALL_IMPACT_G  = 2.5;   // impacto típico de una caída real
+    const FALL_WAIT_MS   = 1000;  // tiempo que se ignora justo después del golpe (rebotes)
+    const FALL_STILL_MS  = 5000;  // tiempo total de verificación desde el impacto
+    const FALL_STILL_TOL = 0.5;   // cuánto puede alejarse de 1 g y seguir considerándose "quieto"
 
-        let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
-    let fallSamples = [];
+    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+    let fallSamples = [];   // lecturas después del impacto: { g, t }
     let fallImpactTs = 0;
+
+    // Línea de diagnóstico bajo la tarjeta de caídas (para ver por qué se confirmó o se descartó)
+    function ptFallDebug(text) {
+      const el = document.getElementById('pt-fall-debug');
+      if (!el) return;
+      el.style.display = 'block';
+      el.textContent = text;
+    }
 
     function ptFallUI(mode, title, sub) {
       const card = document.getElementById('pt-fall-card');
@@ -1657,18 +1666,30 @@
           fallImpactTs = Date.now();
           fallSamples = [];
           ptFallUI('active', 'Impacto detectado', 'Verificando si la persona se levanta...');
+          ptFallDebug('Impacto de ' + g.toFixed(2) + ' g · verificando quietud...');
           setTimeout(ptEvaluateFall, FALL_STILL_MS);
         }
       } else if (fallState === 'impact') {
-        if (Date.now() - fallImpactTs > FALL_WAIT_MS) fallSamples.push(g);
+        fallSamples.push({ g: g, t: Date.now() - fallImpactTs });
       }
     }
 
+    // Se confirma la caída si, al final de la verificación, la persona NO se está moviendo:
+    // se miran solo las últimas lecturas (los rebotes justo después del golpe no cuentan).
+    // Si no llegó ninguna lectura de movimiento, se considera quieta (ante la duda, avisa;
+    // el botón "Estoy bien" sirve para descartar una falsa alarma).
     function ptEvaluateFall() {
       if (fallState !== 'impact') return;
-      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
-      if (quieto) ptTriggerFall();
-      else {
+      const lecturas = fallSamples.filter(s => s.t > FALL_WAIT_MS).map(s => s.g);
+      const ultimas = lecturas.slice(-3);
+      const seMovio = ultimas.some(g => Math.abs(g - 1) >= FALL_STILL_TOL);
+      const detalle = lecturas.length ? lecturas.map(g => g.toFixed(2)).join(', ') : 'sin lecturas';
+      console.log('MOON caída: lecturas después del impacto =', lecturas, '· se movió:', seMovio);
+      if (!seMovio) {
+        ptFallDebug('Lecturas después del impacto: ' + detalle + ' → quieto, caída confirmada');
+        ptTriggerFall();
+      } else {
+        ptFallDebug('Lecturas después del impacto: ' + detalle + ' → hubo movimiento, descartado');
         fallState = 'idle';
         ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
       }
