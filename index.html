@@ -702,6 +702,7 @@
           <div class="pt-fall-controls">
             <button type="button" class="pt-fall-dismiss" id="pt-fall-dismiss" onclick="ptDismissFall()">Estoy bien (falsa alarma)</button>
           </div>
+          <div class="pt-fall-sub" id="pt-mail-status" style="display:none;margin-top:0.8rem;"></div>
         </div>
 
         <div class="pm-diag-title">Diagnóstico automático</div>
@@ -1316,8 +1317,17 @@
       else if (bpm > 100) bpmState = 'warning';
       else bpmState = 'ok';
 
+      const estadoPrevio = { spo2: ptAlarmState.spo2, bpm: ptAlarmState.bpm };
       ptSetVital('spo2', spo2State, ((spo2-80)/20)*100, spo2State==='ok'?'#639922':spo2State==='warning'?'#EF9F27':'#E24B4A');
       ptSetVital('bpm', bpmState, Math.min(((bpm-30)/150)*100,100), bpmState==='ok'?'#639922':bpmState==='warning'?'#EF9F27':'#E24B4A');
+
+      // Si algún signo vital recién se puso crítico, es una falla nueva:
+      // se saltea la espera y se manda el mail enseguida.
+      if ((spo2State === 'danger' && estadoPrevio.spo2 !== 'danger') ||
+          (bpmState === 'danger' && estadoPrevio.bpm !== 'danger')) {
+        ptLastEmailTs = 0;
+        ptCheckAlarm();
+      }
 
       ptBuildDiags(spo2, spo2State, bpm, bpmState);
     }
@@ -1419,9 +1429,13 @@
       return session ? session.email : '';
     }
 
-    // Tiempo mínimo entre mails (para no gastar los 200 mails/mes del plan gratis).
-    // Para probar más rápido podés bajarlo, ej: 30 * 1000 (30 segundos).
-    const EMAILJS_COOLDOWN_MS = 5 * 60 * 1000;
+    // Tiempo entre RECORDATORIOS mientras la misma emergencia sigue activa.
+    // Una falla nueva (caída nueva, o un signo vital que recién se pone crítico)
+    // manda el mail enseguida, sin esperar. Para recordatorios más seguidos,
+    // bajá estos valores, ej: 30 * 1000 (30 segundos).
+    const EMAILJS_COOLDOWN_FALL_MS   = 30 * 1000;       // caídas: recordatorio cada 30 segundos
+    const EMAILJS_COOLDOWN_VITALS_MS = 60 * 1000;       // signos vitales: recordatorio cada 1 minuto
+    const EMAILJS_GAP_MS = 1500; // separación mínima entre dos envíos seguidos
     let ptLastEmailTs = 0;      // espera entre mails de signos vitales
     let ptLastFallEmailTs = 0;  // espera propia para mails de caída (independiente de los vitales)
 
@@ -1430,6 +1444,7 @@
       if (!ptGetEmergencyEmail()) return false; // no hay sesión, no se manda nada
       if (!window.emailjs || EMAILJS_PUBLIC_KEY === 'TU_PUBLIC_KEY' || EMAILJS_TEMPLATE_ID === 'TU_TEMPLATE_ID') {
         console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) o no cargó la librería.');
+        ptMailStatus(false, 'EmailJS no está configurado o no cargó la librería.');
         return false;
       }
       return true;
@@ -1451,43 +1466,81 @@
       }, extra);
     }
 
+    // Muestra en pantalla (tarjeta de caídas) si el mail salió o falló y por qué.
+    function ptMailStatus(ok, text) {
+      const el = document.getElementById('pt-mail-status');
+      if (!el) return;
+      el.style.display = 'block';
+      el.style.color = ok ? '#9bd15a' : '#f2a3a2';
+      el.textContent = (ok ? '✉ ' : '⚠ ') + text;
+    }
+
+    // Cola de envío: EmailJS rechaza pedidos pegados (tiene un límite por segundo),
+    // así que los mails salen de a uno, con una pausa entre cada uno.
+    // El de caída va siempre primero.
+    const ptEmailQueue = [];
+    let ptEmailBusy = false;
+
+    function ptEnqueueEmail(job, urgente) {
+      if (urgente) ptEmailQueue.unshift(job); else ptEmailQueue.push(job);
+      ptRunEmailQueue();
+    }
+
+    async function ptRunEmailQueue() {
+      if (ptEmailBusy) return;
+      ptEmailBusy = true;
+      while (ptEmailQueue.length) {
+        const job = ptEmailQueue.shift();
+        try {
+          await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, job.params);
+          const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+          console.log('MOON: ' + job.label + ' enviado a ' + job.params.to_email);
+          ptMailStatus(true, 'Mail de ' + job.label + ' enviado a ' + job.params.to_email + ' (' + hora + ')');
+        } catch (err) {
+          const motivo = (err && (err.text || err.message))
+            ? ((err.status ? err.status + ' · ' : '') + (err.text || err.message))
+            : 'error desconocido';
+          console.error('MOON: error al enviar el mail de ' + job.label, err);
+          ptMailStatus(false, 'No se pudo enviar el mail de ' + job.label + ': ' + motivo);
+          if (job.onFail) job.onFail(); // permite reintentar en el próximo chequeo
+        }
+        await new Promise(r => setTimeout(r, EMAILJS_GAP_MS));
+      }
+      ptEmailBusy = false;
+    }
+
     // Mail por signos vitales críticos (solo vitales, las caídas tienen su propia función)
     function ptSendEmergencyEmail(criticos) {
       if (!ptEmailListo()) return;
-      if (Date.now() - ptLastEmailTs < EMAILJS_COOLDOWN_MS) return;
+      if (Date.now() - ptLastEmailTs < EMAILJS_COOLDOWN_VITALS_MS) return;
       ptLastEmailTs = Date.now();
-
-      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, ptEmailBase({
-        caida: 'No',
-        titulo: 'Alerta MOON — valor crítico',
-        mensaje: 'Valor crítico en: ' + criticos.join(', ') + '.'
-      })).then(() => {
-        console.log('MOON: mail de signos vitales enviado a ' + ptGetEmergencyEmail());
-      }).catch((err) => {
-        console.error('MOON: error al enviar el mail de signos vitales', err);
-        ptLastEmailTs = 0; // si falló, permite reintentar en el próximo chequeo
-      });
+      ptEnqueueEmail({
+        label: 'signos vitales',
+        params: ptEmailBase({
+          caida: ptAlarmState.caida === 'danger' ? 'Sí' : 'No', // si justo hay una caída activa, que el mail lo refleje
+          titulo: 'Alerta MOON — valor crítico',
+          mensaje: 'Valor crítico en: ' + criticos.join(', ') + '.'
+        }),
+        onFail: () => { ptLastEmailTs = 0; }
+      }, false);
     }
 
-    // Mail por caída detectada (con su propio contador de espera)
+    // Mail por caída detectada (con su propio contador de espera y prioridad)
     function ptSendFallEmail() {
       if (!ptEmailListo()) return;
-      if (Date.now() - ptLastFallEmailTs < EMAILJS_COOLDOWN_MS) return;
+      if (Date.now() - ptLastFallEmailTs < EMAILJS_COOLDOWN_FALL_MS) return;
       ptLastFallEmailTs = Date.now();
-
       const profile = ptGetMyProfile();
       const nombre = profile ? profile.name : 'Paciente';
-
-      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, ptEmailBase({
-        caida: 'Sí',
-        titulo: 'Alerta MOON — caída detectada',
-        mensaje: 'El paciente ' + nombre + ' sufrió una CAÍDA y no se movió después del impacto.'
-      })).then(() => {
-        console.log('MOON: mail de caída enviado a ' + ptGetEmergencyEmail());
-      }).catch((err) => {
-        console.error('MOON: error al enviar el mail de caída', err);
-        ptLastFallEmailTs = 0; // si falló, permite reintentar en el próximo chequeo
-      });
+      ptEnqueueEmail({
+        label: 'caída',
+        params: ptEmailBase({
+          caida: 'Sí',
+          titulo: 'Alerta MOON — caída detectada',
+          mensaje: 'El paciente ' + nombre + ' sufrió una CAÍDA y no se movió después del impacto.'
+        }),
+        onFail: () => { ptLastFallEmailTs = 0; }
+      }, true);
     }
 
     // Ya no existe "silenciar": mientras el signo vital siga en "danger",
@@ -1536,11 +1589,11 @@
         textEl.textContent = 'Alerta: valor crítico en ' + criticos.join(', ');
         banner.style.display = 'flex';
         ptBeep();
-        // Los mails de vitales y de caída van por separado (cada uno con su propia espera).
-        // Se reenvían en cada chequeo (10s por defecto) respetando esa espera, mientras siga la emergencia.
+        // Los mails de caída y de vitales van por separado (cada uno con su espera).
+        // Se reintentan en cada chequeo (10s) respetando esa espera, mientras siga la emergencia.
         const vitales = criticos.filter(c => c !== 'caída detectada');
+        if (ptAlarmState.caida === 'danger') ptSendFallEmail(); // la caída va primero
         if (vitales.length) ptSendEmergencyEmail(vitales);
-        if (ptAlarmState.caida === 'danger') ptSendFallEmail();
       } else {
         banner.style.display = 'none';
       }
@@ -1570,7 +1623,7 @@
     const FALL_STILL_MS  = 4000;
     const FALL_STILL_TOL = 0.35;
 
-    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+        let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
     let fallSamples = [];
     let fallImpactTs = 0;
 
@@ -1612,14 +1665,14 @@
     }
 
     function ptEvaluateFall() {
-  if (fallState !== 'impact') return;
-  const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
-  if (quieto) ptTriggerFall();
-  else {
-    fallState = 'idle';
-    ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
-  }
-}
+      if (fallState !== 'impact') return;
+      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
+      if (quieto) ptTriggerFall();
+      else {
+        fallState = 'idle';
+        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+      }
+    }
 
     function ptTriggerFall() {
       fallState = 'alert';
