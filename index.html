@@ -617,6 +617,12 @@
             <input type="text" id="pt-pOtras" placeholder="Ej: alergia a la penicilina, marcapasos, etc." autocomplete="off">
           </div>
 
+          <div class="pt-field pt-field-full">
+            <label for="pt-pAlertEmail">Email donde querés recibir las alertas</label>
+            <input type="email" id="pt-pAlertEmail" placeholder="Ej: familiar@email.com" autocomplete="off" autocorrect="off" spellcheck="false">
+            <div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.4rem;">Si lo dejás vacío, las alertas llegan al email de tu cuenta.</div>
+          </div>
+
           <button type="submit" class="pt-btn" style="margin-top:1.6rem;">Guardar y ver panel del paciente</button>
         </form>
       </div>
@@ -702,7 +708,6 @@
           <div class="pt-fall-controls">
             <button type="button" class="pt-fall-dismiss" id="pt-fall-dismiss" onclick="ptDismissFall()">Estoy bien (falsa alarma)</button>
           </div>
-          <div class="pt-fall-sub" id="pt-fall-debug" style="display:none;margin-top:0.8rem;"></div>
           <div class="pt-fall-sub" id="pt-mail-status" style="display:none;margin-top:0.8rem;"></div>
         </div>
 
@@ -939,20 +944,24 @@
       ptShowView('pt-setupView');
       ptSetupActive = new Set(existing ? existing.diseases : []);
       ptRenderSetupPills();
+      const ptSess = ptGetSession();
+      const ptCuenta = ptSess ? ptSess.email : '';
       if (existing) {
+        document.getElementById('pt-pAlertEmail').value = existing.alertEmail || ptCuenta;
         document.getElementById('pt-pName').value = existing.name || '';
         document.getElementById('pt-pAge').value = existing.age || '';
         document.getElementById('pt-pGender').value = existing.gender || '';
         document.getElementById('pt-pOtras').value = existing.otras || '';
       } else {
         document.getElementById('pt-setupForm').reset();
+        document.getElementById('pt-pAlertEmail').value = ptCuenta;
       }
     }
 
     function ptShowPanel(profile) {
       ptShowView('pt-panelView');
       const session = ptGetSession();
-      document.getElementById('pt-hello').textContent = session ? ('Sesión: ' + session.email) : '';
+      document.getElementById('pt-hello').textContent = session ? ('Sesión: ' + session.email + ' · Alertas a: ' + (profile.alertEmail || session.email)) : '';
       document.getElementById('navUser').textContent = session ? ('Hola, ' + session.name.split(' ')[0]) : '';
 
       patientActive = new Set(profile.diseases);
@@ -992,6 +1001,7 @@
       const age = document.getElementById('pt-pAge').value;
       const gender = document.getElementById('pt-pGender').value;
       const otras = document.getElementById('pt-pOtras').value.trim();
+      const alertEmailInput = document.getElementById('pt-pAlertEmail').value.trim().toLowerCase();
       const errorEl = document.getElementById('pt-setupError');
       const submitBtn = e.target.querySelector('.pt-btn');
 
@@ -1008,6 +1018,7 @@
         name: name, age: age, gender: gender,
         diseases: [...ptSetupActive],
         otras: otras,
+        alertEmail: alertEmailInput || (ptGetSession() ? ptGetSession().email : ''),
         vitals: existing ? existing.vitals : null, // se completa con datos reales de la pulsera
         updatedAt: new Date().toISOString()
       };
@@ -1425,9 +1436,12 @@
     }
 
     function ptGetEmergencyEmail() {
-      // El mail de emergencia es el mismo con el que la persona inició sesión / se registró.
+      // Las alertas van al email que se cargó en el perfil del paciente.
+      // Si no se cargó ninguno, se usa el email con el que se inició sesión.
       const session = ptGetSession();
-      return session ? session.email : '';
+      if (!session) return '';
+      const profile = ptGetMyProfile();
+      return (profile && profile.alertEmail) ? profile.alertEmail : session.email;
     }
 
     // Tiempo entre RECORDATORIOS mientras la misma emergencia sigue activa.
@@ -1619,22 +1633,14 @@
     // Si después del impacto hay movimiento, se descarta.
     // La pulsera manda la aceleración total en g como 4° dato: "spo2,bpm,temp,g"
     // ==========================================================================
-    const FALL_IMPACT_G  = 3.5;   // impacto típico de una caída real
-    const FALL_WAIT_MS   = 1000;  // tiempo que se ignora justo después del golpe (rebotes)
-    const FALL_STILL_MS  = 5000;  // tiempo total de verificación desde el impacto
-    const FALL_STILL_TOL = 0.5;   // cuánto puede alejarse de 1 g y seguir considerándose "quieto"
+    const FALL_IMPACT_G  = 2.5;   // umbral fijo: impacto típico de una caída real (no ajustable)
+    const FALL_WAIT_MS   = 1000;
+    const FALL_STILL_MS  = 4000;
+    const FALL_STILL_TOL = 0.35;
 
-    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
-    let fallSamples = [];   // lecturas después del impacto: { g, t }
+        let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+    let fallSamples = [];
     let fallImpactTs = 0;
-
-    // Línea de diagnóstico bajo la tarjeta de caídas (para ver por qué se confirmó o se descartó)
-    function ptFallDebug(text) {
-      const el = document.getElementById('pt-fall-debug');
-      if (!el) return;
-      el.style.display = 'block';
-      el.textContent = text;
-    }
 
     function ptFallUI(mode, title, sub) {
       const card = document.getElementById('pt-fall-card');
@@ -1666,30 +1672,18 @@
           fallImpactTs = Date.now();
           fallSamples = [];
           ptFallUI('active', 'Impacto detectado', 'Verificando si la persona se levanta...');
-          ptFallDebug('Impacto de ' + g.toFixed(2) + ' g · verificando quietud...');
           setTimeout(ptEvaluateFall, FALL_STILL_MS);
         }
       } else if (fallState === 'impact') {
-        fallSamples.push({ g: g, t: Date.now() - fallImpactTs });
+        if (Date.now() - fallImpactTs > FALL_WAIT_MS) fallSamples.push(g);
       }
     }
 
-    // Se confirma la caída si, al final de la verificación, la persona NO se está moviendo:
-    // se miran solo las últimas lecturas (los rebotes justo después del golpe no cuentan).
-    // Si no llegó ninguna lectura de movimiento, se considera quieta (ante la duda, avisa;
-    // el botón "Estoy bien" sirve para descartar una falsa alarma).
     function ptEvaluateFall() {
       if (fallState !== 'impact') return;
-      const lecturas = fallSamples.filter(s => s.t > FALL_WAIT_MS).map(s => s.g);
-      const ultimas = lecturas.slice(-3);
-      const seMovio = ultimas.some(g => Math.abs(g - 1) >= FALL_STILL_TOL);
-      const detalle = lecturas.length ? lecturas.map(g => g.toFixed(2)).join(', ') : 'sin lecturas';
-      console.log('MOON caída: lecturas después del impacto =', lecturas, '· se movió:', seMovio);
-      if (!seMovio) {
-        ptFallDebug('Lecturas después del impacto: ' + detalle + ' → quieto, caída confirmada');
-        ptTriggerFall();
-      } else {
-        ptFallDebug('Lecturas después del impacto: ' + detalle + ' → hubo movimiento, descartado');
+      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
+      if (quieto) ptTriggerFall();
+      else {
         fallState = 'idle';
         ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
       }
