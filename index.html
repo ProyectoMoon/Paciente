@@ -1070,8 +1070,8 @@
        o de característica, cambialos acá para que coincidan exactamente.
 
        Del lado del ESP32-C3, la característica de VITALES tiene que mandar
-       por "notify" un texto simple con el formato:  spo2,bpm,temp
-       Ejemplo:  pVitalsChar->setValue("97,78,36.6"); pVitalsChar->notify();
+       por "notify" un texto simple con el formato:  spo2,bpm,temp,g
+       Ejemplo:  pVitalsChar->setValue("97,78,36.6,1.02"); pVitalsChar->notify();
 
        -------------------------------------------------------------------
        POR QUÉ SE MUESTRAN TODOS LOS DISPOSITIVOS (no solo los que anuncian
@@ -1273,7 +1273,10 @@
     function ptHandleBluetoothData(event) {
       const text = new TextDecoder().decode(event.target.value);
       // Formato: "spo2,bpm,temp" o "spo2,bpm,temp,g"
+      console.log('MOON BLE recibido:', text);
       const partes = text.trim().split(',');
+
+      // Signos vitales: solo si los 3 primeros datos son números válidos
       if (partes.length >= 3) {
         const spo2 = parseFloat(partes[0]);
         const bpm = parseFloat(partes[1]);
@@ -1282,6 +1285,9 @@
           ptSetLiveVitals(spo2, bpm, temp);
         }
       }
+
+      // Aceleración (g): se procesa SIEMPRE que llegue, aunque spo2/bpm/temp
+      // vengan en "nan" o vacíos (el sensor de SpO2 a veces no tiene lectura).
       if (partes.length >= 4) {
         const g = parseFloat(partes[3]);
         if (!isNaN(g)) ptProcessG(g);
@@ -1632,13 +1638,22 @@
     // Algoritmo: IMPACTO (g alto) -> espera 1s -> quietud (g ~ 1) = CAÍDA.
     // Si después del impacto hay movimiento, se descarta.
     // La pulsera manda la aceleración total en g como 4° dato: "spo2,bpm,temp,g"
+    //
+    // AJUSTES (versión corregida):
+    // - Tolerancia de quietud más amplia (0.5 g) para absorber el ruido del MPU6050.
+    // - Alcanza con 1 muestra posterior al impacto (la pulsera puede mandar lento).
+    // - Se confirma la caída si al menos el 80% de las muestras están quietas
+    //   (antes tenían que estar TODAS quietas).
+    // - Si se descarta, la pantalla dice por qué (pocos datos / movimiento).
     // ==========================================================================
-    const FALL_IMPACT_G  = 2.5;   // umbral fijo: impacto típico de una caída real (no ajustable)
-    const FALL_WAIT_MS   = 1000;
-    const FALL_STILL_MS  = 4000;
-    const FALL_STILL_TOL = 0.35;
+    const FALL_IMPACT_G     = 2.5;   // umbral fijo: impacto típico de una caída real
+    const FALL_WAIT_MS      = 1000;  // se ignoran las muestras del primer segundo (rebote del impacto)
+    const FALL_STILL_MS     = 4000;  // a los 4 s después del impacto se decide
+    const FALL_STILL_TOL    = 0.5;   // |g - 1| menor a esto = quieto
+    const FALL_MIN_SAMPLES  = 1;     // mínimo de muestras para poder decidir
+    const FALL_STILL_RATIO  = 0.8;   // fracción de muestras quietas necesaria
 
-        let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
+    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
     let fallSamples = [];
     let fallImpactTs = 0;
 
@@ -1681,11 +1696,21 @@
 
     function ptEvaluateFall() {
       if (fallState !== 'impact') return;
-      const quieto = fallSamples.length >= 2 && fallSamples.every(g => Math.abs(g - 1) < FALL_STILL_TOL);
-      if (quieto) ptTriggerFall();
-      else {
+
+      console.log('MOON caída: muestras después del impacto =', fallSamples);
+
+      const quietas = fallSamples.filter(g => Math.abs(g - 1) < FALL_STILL_TOL);
+      const quieto = fallSamples.length >= FALL_MIN_SAMPLES &&
+                     (quietas.length / fallSamples.length) >= FALL_STILL_RATIO;
+
+      if (quieto) {
+        ptTriggerFall();
+      } else {
         fallState = 'idle';
-        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
+        const motivo = fallSamples.length < FALL_MIN_SAMPLES
+          ? 'Descartado: llegaron muy pocos datos (' + fallSamples.length + ')'
+          : 'Descartado: se detectó movimiento';
+        ptFallUI('active', 'Monitoreando', motivo);
       }
     }
 
