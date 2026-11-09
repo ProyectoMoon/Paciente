@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+=<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -1238,7 +1238,7 @@
           await bleCharacteristic.startNotifications();
           bleCharacteristic.addEventListener('characteristicvaluechanged', ptHandleBluetoothData);
 
-          ptSetBleUI('connected', 'Conectada — recibiendo datos', 'Se va a reconectar sola la próxima vez que entres con esta cuenta');
+          ptSetBleUI('connected', 'Conectada — esperando primer dato...', 'Se va a reconectar sola la próxima vez que entres con esta cuenta');
         } catch (serviceErr) {
           console.warn('MOON: conectado, pero no se encontró el servicio de datos esperado', serviceErr);
           bleCharacteristic = null;
@@ -1274,6 +1274,7 @@
       const text = new TextDecoder().decode(event.target.value);
       // Formato: "spo2,bpm,temp" o "spo2,bpm,temp,g"
       console.log('MOON BLE recibido:', text);
+      document.getElementById('pt-ble-status').textContent = 'Conectada — recibiendo datos';
       const partes = text.trim().split(',');
 
       // Signos vitales: solo si los 3 primeros datos son números válidos
