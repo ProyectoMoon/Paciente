@@ -1030,6 +1030,7 @@
 
     // ---- Estado "esperando datos" (sin pulsera conectada todavía / desconectada) ----
     function ptRenderWaiting() {
+      ptStale = false;
       document.getElementById('pt-live-dot').style.background = '#5a6478';
       document.getElementById('pt-live-dot').style.animation = 'none';
       document.getElementById('pt-live-text').textContent = 'Esperando datos de la pulsera...';
@@ -1272,45 +1273,58 @@
       }
     }
 
-    // ---- Valores ESTIMADOS mientras no hay lectura real ----
-    // Se muestran SOLO con la pulsera conectada y sin datos válidos todavía.
-    // Van marcados como "Estimado" (con "~" y en gris), NO se guardan como
-    // lectura real, NO disparan alarmas ni diagnósticos, y se reemplazan en
-    // cuanto llega el primer dato verdadero del sensor.
-    const PT_ESTIMATE_SPO2 = 97;
-    const PT_ESTIMATE_BPM = 75;
-    const PT_ESTIMATE_AFTER_MS = 3000; // espera sin datos reales antes de estimar
+    // ---- Última medición real mientras no llegan datos nuevos ----
+    // Si la pulsera está conectada pero el sensor no da una lectura válida,
+    // se sigue mostrando la ÚLTIMA medición real, en gris y marcada como
+    // "Última medición (hace X s)". No se inventan valores: si todavía no hubo
+    // ninguna medición real, se muestra "--".
+    // Un valor viejo no cuenta como lectura actual: pasados PT_STALE_ALARM_MS
+    // sin datos nuevos deja de mantener la alarma de signos vitales.
+    const PT_ESTIMATE_AFTER_MS = 3000;   // espera sin datos nuevos antes de pasar a "última medición"
+    const PT_STALE_ALARM_MS = 60000;     // tiempo máximo que un valor viejo mantiene una alarma
     let ptLastRealVitalsTs = 0;
+    let ptLastGood = null;               // { spo2, bpm }
+    let ptStale = false;
+
+    function ptAgoText(ms) {
+      const s = Math.round(ms / 1000);
+      if (s < 60) return 'hace ' + s + ' s';
+      return 'hace ' + Math.floor(s / 60) + ' min';
+    }
 
     function ptRenderEstimated() {
+      if (!ptLastGood) return; // nunca hubo una medición real: queda en "--"
+      ptStale = true;
+      const edad = Date.now() - ptLastRealVitalsTs;
       const dot = document.getElementById('pt-live-dot');
       dot.style.background = '#EF9F27';
       dot.style.animation = 'none';
       document.getElementById('pt-live-text').textContent =
-        'Pulsera conectada — mostrando valores ESTIMADOS (todavía sin lectura real del sensor)';
+        'Pulsera conectada — sin lectura nueva del sensor, mostrando la última medición';
 
-      [['spo2', PT_ESTIMATE_SPO2, ((PT_ESTIMATE_SPO2 - 80) / 20) * 100],
-       ['bpm',  PT_ESTIMATE_BPM,  Math.min(((PT_ESTIMATE_BPM - 30) / 150) * 100, 100)]].forEach(([id, val, pct]) => {
-        document.getElementById('pt-val-' + id).textContent = '~' + val;
+      [['spo2', ptLastGood.spo2, ((ptLastGood.spo2 - 80) / 20) * 100],
+       ['bpm',  ptLastGood.bpm,  Math.min(((ptLastGood.bpm - 30) / 150) * 100, 100)]].forEach(([id, val, pct]) => {
+        document.getElementById('pt-val-' + id).textContent = val;
         document.getElementById('pt-card-' + id).className = 'pm-vital estimated';
         document.getElementById('pt-icon-' + id).className = 'pm-vital-icon';
         const bar = document.getElementById('pt-bar-' + id);
-        bar.style.width = Math.round(pct) + '%';
+        bar.style.width = Math.max(0, Math.min(100, Math.round(pct))) + '%';
         bar.style.background = '#5a6478';
         const st = document.getElementById('pt-status-' + id);
-        st.textContent = 'Estimado';
+        st.textContent = 'Última medición · ' + ptAgoText(edad);
         st.className = 'pm-vital-status status-est';
-        ptAlarmState[id] = 'ok'; // un estimado nunca dispara alarma
+        // Un valor viejo no mantiene una alarma para siempre
+        if (edad > PT_STALE_ALARM_MS) ptAlarmState[id] = 'ok';
       });
 
       document.getElementById('pt-diags').innerHTML =
-        '<div class="pm-diag diag-warning"><i class="ti ti-info-circle pm-diag-icon warning" aria-hidden="true"></i><div><div class="pm-diag-head">Valores estimados, no medidos</div><div class="pm-diag-body">La pulsera está conectada pero el sensor todavía no logró una lectura real. Los números con “~” son una referencia y no reflejan el estado del paciente. Apoyá el dedo firme y quieto sobre el sensor.</div></div></div>';
+        '<div class="pm-diag diag-warning"><i class="ti ti-info-circle pm-diag-icon warning" aria-hidden="true"></i><div><div class="pm-diag-head">Sin lectura nueva del sensor</div><div class="pm-diag-body">Se muestra la última medición real (' + ptAgoText(edad) + '). No es el estado actual del paciente. Apoyá el dedo firme y quieto sobre el sensor.</div></div></div>';
     }
 
-    // Texto del valor para el mail: si es un estimado, que quede aclarado
+    // Texto del valor para el mail: si es una medición vieja, que quede aclarado
     function ptVitalForMail(id) {
       const t = document.getElementById('pt-val-' + id).textContent;
-      return t.charAt(0) === '~' ? 'sin lectura real (estimado ' + t.slice(1) + ')' : t;
+      return ptStale ? t + ' (última medición, no actual)' : t;
     }
 
     function ptHandleBluetoothData(event) {
@@ -1327,6 +1341,8 @@
         const temp = parseFloat(partes[2]);
         if (!isNaN(spo2) && !isNaN(bpm) && !isNaN(temp)) {
           ptLastRealVitalsTs = Date.now();
+          ptLastGood = { spo2: spo2, bpm: bpm };
+          ptStale = false;
           ptSetLiveVitals(spo2, bpm, temp);
         } else if (Date.now() - ptLastRealVitalsTs > PT_ESTIMATE_AFTER_MS) {
           // Pulsera conectada pero sin lectura válida todavía (dedo mal apoyado,
