@@ -37,6 +37,10 @@
 #define MAX_DIF_BPM  35
 #define MAX_DIF_SPO2 6
 #define USAR_MPU 1
+// 1 = giroscopio prendido (se lee y se imprime en el diagnóstico).
+// 0 = giroscopio apagado: ahorra ~3,5 mA. Hoy la web solo usa la
+//     aceleración (g), así que podés apagarlo si no lo necesitás.
+#define USAR_GIROSCOPIO 1
 
 #define SDA_PIN 8
 #define SCL_PIN 9
@@ -138,10 +142,34 @@ void mpuEscribir(uint8_t reg, uint8_t val) {
 
 void iniciarMPU() {
   mpuEscribir(0x6B, 0x00);   // PWR_MGMT_1: despertar
-  mpuEscribir(0x6C, 0x07);   // PWR_MGMT_2: APAGA el giroscopio (no se usa) -> ahorra ~3,5 mA
-  mpuEscribir(0x1C, 0x10);   // ACCEL_CONFIG: ±8g
+#if USAR_GIROSCOPIO
+  mpuEscribir(0x6C, 0x00);   // PWR_MGMT_2: acelerómetro y giroscopio prendidos
+  LOG("MPU6050 listo (±8g, giroscopio prendido).\n");
+#else
+  mpuEscribir(0x6C, 0x07);   // PWR_MGMT_2: apaga el giroscopio -> ahorra ~3,5 mA
   LOG("MPU6050 listo (±8g, giroscopio apagado).\n");
+#endif
+  mpuEscribir(0x1C, 0x10);   // ACCEL_CONFIG: ±8g
 }
+
+#if USAR_GIROSCOPIO
+#define GYRO_SENSITIVITY 131.0f   // rango ±250 °/s
+
+// Lee el giroscopio en °/s
+void leerGiroscopio(float &gx, float &gy, float &gz) {
+  gx = gy = gz = 0;
+  Wire.beginTransmission(MPU6050_ADDR);
+  Wire.write(0x43);
+  if (Wire.endTransmission(false) != 0) return;
+  if (Wire.requestFrom((uint16_t)MPU6050_ADDR, (uint8_t)6, true) != 6) return;
+  int16_t x = Wire.read() << 8 | Wire.read();
+  int16_t y = Wire.read() << 8 | Wire.read();
+  int16_t z = Wire.read() << 8 | Wire.read();
+  gx = x / GYRO_SENSITIVITY;
+  gy = y / GYRO_SENSITIVITY;
+  gz = z / GYRO_SENSITIVITY;
+}
+#endif
 
 // Aceleración total en g (solo acelerómetro: 6 bytes)
 float leerG() {
@@ -317,6 +345,12 @@ void loop() {
       readingIndex = 0;
     }
   }
+
+#if USAR_MPU && USAR_GIROSCOPIO
+  float gx, gy, gz;
+  leerGiroscopio(gx, gy, gz);
+  LOG("Gyro X:%.2f Y:%.2f Z:%.2f deg/s\n", gx, gy, gz);
+#endif
 
   LOG("--------------------------------------------------\n");
 }
