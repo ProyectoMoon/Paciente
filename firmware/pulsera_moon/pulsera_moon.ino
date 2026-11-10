@@ -39,7 +39,13 @@
 #define IR_DEDO_MIN 50000
 // Al apoyar el dedo, la señal tarda unos segundos en asentarse: se descartan
 // las muestras de este tiempo antes de empezar a medir.
-#define ESTABILIZAR_MS 4000
+#define ESTABILIZAR_MS 2000
+// Brillo automático del LED: mientras se estabiliza, se sube o baja la luz
+// hasta que el IR quede en este rango. Si la luz es mucha el sensor se
+// satura (~262000) y si es poca la señal es débil: en los dos casos da
+// "señal no válida".
+#define IR_OBJETIVO_MIN 90000
+#define IR_OBJETIVO_MAX 200000
 // Lecturas válidas y parecidas entre sí que hacen falta para mostrar el
 // primer valor (antes era 1: mostraba la primera, que suele ser ruido).
 #define MIN_LECTURAS_MOSTRAR 2
@@ -133,6 +139,8 @@ int ultimoBpm = 0;
 int ciclosInvalidos = 0;
 float ultimaTemp = 0.0f;
 uint32_t ciclosDesdeTemp = TEMP_CADA_CICLOS;   // fuerza una lectura en el primer ciclo
+
+uint8_t brilloLed = 100;     // brillo actual del LED (0-255), se ajusta solo
 
 // Pico de aceleración (en g) desde el último envío. 1.0 = quieto.
 float gReportado = 1.0f;
@@ -251,7 +259,7 @@ void setup() {
   }
   LOG("Sensor de pulso detectado.\n");
 
-  byte ledBrightness = 100;   // si IR llega a ~260000 se satura: bajalo
+  byte ledBrightness = brilloLed;   // valor inicial: después se ajusta solo
   byte sampleAverage = 4;
   byte ledMode = 2;
   int sampleRate = 100;
@@ -314,6 +322,24 @@ void loop() {
     if (dedoDesde == 0) {
       dedoDesde = millis();
       LOG("Dedo detectado, estabilizando la señal...\n");
+    }
+    // Ajusta el brillo mientras se estabiliza (cada ~200 ms, 8 muestras)
+    static uint8_t cuenta = 0;
+    if (++cuenta >= 8) {
+      cuenta = 0;
+      uint8_t antes = brilloLed;
+      int nuevo = brilloLed;
+      if (ir > IR_OBJETIVO_MAX)      nuevo -= (ir > 250000 ? 20 : 5);
+      else if (ir < IR_OBJETIVO_MIN) nuevo += 5;
+      if (nuevo < 10)  nuevo = 10;
+      if (nuevo > 255) nuevo = 255;
+      brilloLed = (uint8_t)nuevo;
+      if (brilloLed != antes) {
+        particleSensor.setPulseAmplitudeRed(brilloLed);
+        particleSensor.setPulseAmplitudeIR(brilloLed);
+        dedoDesde = millis();   // con brillo nuevo, la señal tiene que volver a asentarse
+        LOG("IR:%lu -> brillo LED %d\n", (unsigned long)ir, brilloLed);
+      }
     }
     if (millis() - dedoDesde < ESTABILIZAR_MS) return;   // descarta estas muestras
     dedoListo = true;
