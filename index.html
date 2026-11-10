@@ -476,6 +476,30 @@
       margin-top: 2px;
     }
 
+    /* ---- Ayuda cuando el navegador no tiene Bluetooth ---- */
+    .pt-ble-help {
+      width: 100%;
+      display: none;
+      margin-top: 6px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(239,159,39,0.45);
+      background: rgba(239,159,39,0.08);
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--color-text-primary);
+    }
+    .pt-ble-help.show { display: block; }
+    .pt-ble-help b { font-weight: 600; }
+    .pt-ble-help ol { margin: 6px 0 0 18px; padding: 0; }
+    .pt-ble-help-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .pt-ble-help-actions a, .pt-ble-help-actions button {
+      font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500;
+      padding: 7px 14px; border-radius: 20px; cursor: pointer; text-decoration: none;
+      border: 1px solid var(--border); color: var(--moon); background: none;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+
     /* ---- Detección de caídas ---- */
     .pt-fall-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.1rem 1.25rem; margin-bottom: 1.5rem; transition: border-color 0.25s; }
     .pt-fall-card.is-active { border-color: #639922; }
@@ -655,7 +679,9 @@
         <button class="pt-ble-action" id="pt-ble-btn" onclick="ptConnectBluetooth()">
           <i class="ti ti-bluetooth" aria-hidden="true"></i> Conectar
         </button>
-        <div class="pt-ble-hint" id="pt-ble-hint">Elegí tu dispositivo de la lista · usá Chrome o Edge</div>
+        <div class="pt-ble-hint" id="pt-ble-hint">Elegí tu dispositivo de la lista</div>
+        <!-- Se muestra solo si el navegador no puede usar Bluetooth (iPhone, Safari, Firefox...) -->
+        <div class="pt-ble-help" id="pt-ble-help"></div>
       </div>
 
       <div class="pm-root">
@@ -992,6 +1018,7 @@
 
       // Intenta reconectar solo con la pulsera que se eligió la última vez
       // para esta cuenta, sin volver a pedir que se elija de la lista.
+      ptCheckBluetoothSupport();
       ptTryAutoReconnect();
     }
 
@@ -1117,7 +1144,8 @@
        estuvieran en vivo.
 
        Requisitos para que el Bluetooth funcione:
-       - Usar Chrome o Edge (Web Bluetooth no anda en Safari ni Firefox)
+       - Usar Chrome o Edge (Web Bluetooth no anda en Safari ni Firefox).
+         En iPhone/iPad: usar la app Bluefy (ver ptShowBluetoothHelp)
        - La página tiene que estar en HTTPS (GitHub Pages ya lo cumple)
        - Elegir un dispositivo de la lista solo se puede después de tocar
          el botón (por seguridad del navegador, no se puede conectar solo
@@ -1186,13 +1214,120 @@
       if (hintText !== undefined) hintEl.textContent = hintText;
     }
 
+    // ==========================================================================
+    // NAVEGADORES SIN BLUETOOTH (iPhone, Safari, Firefox)
+    // ==========================================================================
+    /* -------------------------------------------------------------------
+       Web Bluetooth (navigator.bluetooth) solo existe en navegadores basados
+       en Chromium: Chrome, Edge, Opera, Samsung Internet (PC y Android).
+       NO existe en Safari, ni en Firefox, ni en NINGÚN navegador de iPhone/
+       iPad (Apple obliga a que todos usen el motor de Safari, así que
+       "Chrome para iPhone" tampoco tiene Bluetooth).
+
+       Eso no se puede activar desde el código de la página. Lo que se hace
+       acá es detectar en qué navegador está la persona y mostrarle la
+       solución concreta:
+       - iPhone/iPad  -> abrir la página con la app gratuita "Bluefy",
+                         que es un navegador para iOS con Web Bluetooth.
+       - Firefox      -> abrirla con Chrome (o Edge).
+       - Safari Mac   -> abrirla con Chrome o Edge.
+    ------------------------------------------------------------------- */
+    const PT_BLUEFY_URL = 'https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055';
+
+    function ptDetectBrowser() {
+      const ua = navigator.userAgent || '';
+      // iPadOS se hace pasar por Mac: se lo distingue por la pantalla táctil
+      const isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+                    (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/i.test(ua);
+      const isFirefox = /Firefox|FxiOS/i.test(ua);
+      const isSafari = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|FxiOS|Android/i.test(ua);
+      return { isIOS, isAndroid, isFirefox, isSafari };
+    }
+
+    // Copia el link de esta página para pegarlo en otro navegador
+    function ptCopyPageLink(btn) {
+      const url = location.href.split('#')[0];
+      const ok = () => { btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i> Link copiado'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(ok, () => prompt('Copiá este link:', url));
+      } else {
+        prompt('Copiá este link:', url);
+      }
+    }
+
+    // Muestra en la tarjeta qué hacer según el navegador
+    function ptShowBluetoothHelp() {
+      const help = document.getElementById('pt-ble-help');
+      const b = ptDetectBrowser();
+      const copyBtn = '<button type="button" onclick="ptCopyPageLink(this)"><i class="ti ti-link" aria-hidden="true"></i> Copiar link de esta página</button>';
+      let html;
+
+      if (b.isIOS) {
+        ptSetBleUI('error', 'El iPhone no permite Bluetooth en este navegador', '');
+        html = '<b>En iPhone/iPad ningún navegador común tiene Bluetooth web</b> (ni Safari ni Chrome). ' +
+               'Usá la app gratuita <b>Bluefy</b>, que sí lo tiene:' +
+               '<ol><li>Instalá Bluefy desde el App Store.</li>' +
+               '<li>Copiá el link de esta página.</li>' +
+               '<li>Abrí Bluefy, pegá el link e iniciá sesión.</li>' +
+               '<li>Tocá <b>Conectar</b> y elegí tu pulsera.</li></ol>' +
+               '<div class="pt-ble-help-actions">' +
+               '<a href="' + PT_BLUEFY_URL + '" target="_blank" rel="noopener"><i class="ti ti-download" aria-hidden="true"></i> Descargar Bluefy</a>' +
+               copyBtn + '</div>';
+      } else if (b.isFirefox) {
+        ptSetBleUI('error', 'Firefox no tiene Bluetooth web', '');
+        html = 'Firefox no permite conectarse a dispositivos Bluetooth desde una página. ' +
+               'Abrí esta página con <b>Chrome</b> o <b>Edge</b>' + (b.isAndroid ? ' (Chrome ya viene instalado en Android)' : '') + '.' +
+               '<div class="pt-ble-help-actions">' + copyBtn + '</div>';
+      } else if (b.isSafari) {
+        ptSetBleUI('error', 'Safari no tiene Bluetooth web', '');
+        html = 'Safari no permite conectarse a dispositivos Bluetooth desde una página. ' +
+               'Abrí esta página con <b>Chrome</b> o <b>Edge</b>.' +
+               '<div class="pt-ble-help-actions">' + copyBtn + '</div>';
+      } else {
+        ptSetBleUI('error', 'Este navegador no tiene Bluetooth web', '');
+        html = 'Abrí esta página con <b>Chrome</b> o <b>Edge</b> (en PC o Android). ' +
+               'En iPhone usá la app <b>Bluefy</b>.' +
+               '<div class="pt-ble-help-actions">' + copyBtn + '</div>';
+      }
+      help.innerHTML = html;
+      help.classList.add('show');
+      // "Conectar/Reintentar" no sirve en este navegador: se oculta
+      document.getElementById('pt-ble-btn').style.display = 'none';
+    }
+
+    // Al entrar al panel: si no hay Bluetooth, avisar de entrada (no recién al tocar Conectar)
+    function ptCheckBluetoothSupport() {
+      const help = document.getElementById('pt-ble-help');
+      if (!navigator.bluetooth) {
+        ptShowBluetoothHelp();
+      } else {
+        help.classList.remove('show');
+        document.getElementById('pt-ble-btn').style.display = '';
+        // En Bluefy (iPhone) no existe getDevices(): hay que elegir la pulsera cada vez
+        if (!navigator.bluetooth.getDevices && ptDetectBrowser().isIOS) {
+          ptSetBleUI('idle', 'Sin conectar', 'Tocá Conectar y elegí tu pulsera de la lista');
+        }
+      }
+    }
+
     // Pide al usuario que elija CUALQUIER dispositivo Bluetooth cercano
     // (sin filtrar por nombre ni por servicio), para no depender de cómo
     // se llame la pulsera.
     async function ptConnectBluetooth() {
       if (!navigator.bluetooth) {
-        ptSetBleUI('error', 'Este navegador no soporta Bluetooth', 'Probá con Chrome o Edge en una PC o Android');
+        ptShowBluetoothHelp();
         return;
+      }
+      // El navegador soporta Bluetooth, pero puede estar apagado en el equipo
+      if (navigator.bluetooth.getAvailability) {
+        try {
+          const disponible = await navigator.bluetooth.getAvailability();
+          if (!disponible) {
+            ptSetBleUI('error', 'El Bluetooth está apagado', 'Prendé el Bluetooth del celular o la compu y tocá Reintentar');
+            return;
+          }
+        } catch (e) { /* si falla la consulta, se intenta conectar igual */ }
       }
       try {
         ptSetBleUI('connecting', 'Buscando dispositivos Bluetooth cercanos...');
@@ -1207,7 +1342,7 @@
         console.error('MOON: error de Bluetooth', err);
         // El usuario cerró el selector sin elegir ningún dispositivo
         if (err.name === 'NotFoundError') {
-          ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
+          ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista');
         } else {
           ptSetBleUI('error', 'No se pudo conectar', err.message);
         }
@@ -1366,7 +1501,7 @@
     // quede mostrando el último valor recibido como si siguiera en vivo.
     function ptOnBluetoothDisconnected() {
       bleCharacteristic = null;
-      ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu dispositivo de la lista · usá Chrome o Edge');
+      ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu dispositivo de la lista');
       ptRenderWaiting();
     }
 
