@@ -564,7 +564,7 @@
         <form id="pt-loginForm">
           <div class="pt-field">
             <label for="pt-loginEmail">Email</label>
-            <input type="email" id="pt-loginEmail" placeholder="tu@email.com" required>
+            <input type="email" id="pt-loginEmail" placeholder="tu@email.com" autocapitalize="off" autocorrect="off" spellcheck="false" required>
           </div>
           <div class="pt-field pt-field-pass">
             <label for="pt-loginPass">Contraseña</label>
@@ -594,7 +594,7 @@
           </div>
           <div class="pt-field">
             <label for="pt-regEmail">Email</label>
-            <input type="email" id="pt-regEmail" placeholder="tu@email.com" required>
+            <input type="email" id="pt-regEmail" placeholder="tu@email.com" autocapitalize="off" autocorrect="off" spellcheck="false" required>
           </div>
           <div class="pt-field pt-field-pass">
             <label for="pt-regPass">Contraseña</label>
@@ -645,7 +645,7 @@
 
           <div class="pt-field pt-field-full">
             <label for="pt-pAlertEmail">Email donde querés recibir las alertas</label>
-            <input type="email" id="pt-pAlertEmail" placeholder="Ej: familiar@email.com" autocomplete="off" autocorrect="off" spellcheck="false">
+            <input type="email" id="pt-pAlertEmail" placeholder="Ej: familiar@email.com" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
             <div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.4rem;">Si lo dejás vacío, las alertas llegan al email de tu cuenta.</div>
           </div>
 
@@ -1030,7 +1030,11 @@
       const age = document.getElementById('pt-pAge').value;
       const gender = document.getElementById('pt-pGender').value;
       const otras = document.getElementById('pt-pOtras').value.trim();
-      const alertEmailInput = document.getElementById('pt-pAlertEmail').value.trim().toLowerCase();
+      const alertEmailInput = ptLimpiarEmail(document.getElementById('pt-pAlertEmail').value);
+      if (alertEmailInput && !ptEmailValido(alertEmailInput)) {
+        alert('El email de alertas "' + alertEmailInput + '" no es válido. Revisalo (ej: familiar@gmail.com).');
+        return;
+      }
       const errorEl = document.getElementById('pt-setupError');
       const submitBtn = e.target.querySelector('.pt-btn');
 
@@ -1529,7 +1533,10 @@
       document.getElementById('pt-val-bpm').textContent = bpm;
 
       let spo2State, bpmState;
-      if (spo2 < 90) spo2State = 'danger'; else if (spo2 < 95) spo2State = 'warning'; else spo2State = 'ok';
+      // SpO2: 95-100 = normal | 82-94 = irregular | menos de 82 = crítico (alerta + mail)
+      if (spo2 < PT_SPO2_CRITICO) spo2State = 'danger';
+      else if (spo2 < PT_SPO2_NORMAL) spo2State = 'warning';
+      else spo2State = 'ok';
 
       if (bpm > 130) bpmState = 'danger';
       else if (bpm > 100) bpmState = 'warning';
@@ -1550,6 +1557,10 @@
       ptBuildDiags(spo2, spo2State, bpm, bpmState);
     }
 
+    // Límites de oxígeno en sangre (SpO2, en %)
+    const PT_SPO2_NORMAL  = 95;  // desde acá para arriba: Normal
+    const PT_SPO2_CRITICO = 82;  // por debajo de este valor: Crítico (suena la alarma y se manda el mail)
+
     function ptSetVital(id, state, pct, color) {
       const card = document.getElementById('pt-card-'+id);
       const icon = document.getElementById('pt-icon-'+id);
@@ -1560,7 +1571,7 @@
       bar.style.width = Math.round(pct) + '%';
       bar.style.background = color;
       const labels = {
-        spo2: { ok:'Normal', warning:'Bajo', danger:'Crítico' },
+        spo2: { ok:'Normal', warning:'Irregular', danger:'Crítico' },
         bpm: { ok:'Normal', warning:'Irregular', danger:'Crítico' }
       };
       statusEl.textContent = labels[id][state];
@@ -1582,7 +1593,7 @@
         const msg = patientActive.has('anemia')
           ? `SpO₂ ${spo2}%. En pacientes con anemia, la capacidad de transporte de O₂ ya está comprometida. Monitorear.`
           : `SpO₂ ${spo2}%. Saturación baja. Asegurarse de que el sensor esté bien colocado y observar evolución.`;
-        diags.push({ cls:'warning', icon:'ti-droplet', title:'Saturación baja', body: msg });
+        diags.push({ cls:'warning', icon:'ti-droplet', title:'Saturación irregular', body: msg });
       } else {
         diags.push({ cls:'ok', icon:'ti-droplet', title:'Oxigenación normal', body:`SpO₂ ${spo2}%, dentro del rango seguro (95–100%).` });
       }
@@ -1641,13 +1652,30 @@
       emailjs.init(EMAILJS_PUBLIC_KEY);
     }
 
+    // Limpia un email: saca espacios y caracteres invisibles que a veces agrega
+    // el teclado del celular (iPhone, autocompletar, copiar/pegar) y que hacen
+    // que EmailJS lo rechace con "422 The recipients address is corrupted".
+    function ptLimpiarEmail(e) {
+      return String(e || '')
+        .replace(/[\s\u200B-\u200D\u2060\uFEFF\u00A0]/g, '')
+        .replace(/[\uFF20\uFE6B]/g, '@')
+        .toLowerCase();
+    }
+    function ptEmailValido(e) {
+      return /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(e);
+    }
+
     function ptGetEmergencyEmail() {
       // Las alertas van al email que se cargó en el perfil del paciente.
-      // Si no se cargó ninguno, se usa el email con el que se inició sesión.
+      // Si no se cargó ninguno (o está mal escrito), se usa el email con el
+      // que se inició sesión.
       const session = ptGetSession();
       if (!session) return '';
       const profile = ptGetMyProfile();
-      return (profile && profile.alertEmail) ? profile.alertEmail : session.email;
+      const alerta = ptLimpiarEmail(profile && profile.alertEmail);
+      if (ptEmailValido(alerta)) return alerta;
+      const cuenta = ptLimpiarEmail(session.email);
+      return ptEmailValido(cuenta) ? cuenta : '';
     }
 
     // Tiempo entre RECORDATORIOS mientras la misma emergencia sigue activa.
@@ -1662,7 +1690,13 @@
 
     // Verifica que haya sesión y que EmailJS esté cargado y configurado
     function ptEmailListo() {
-      if (!ptGetEmergencyEmail()) return false; // no hay sesión, no se manda nada
+      if (!ptGetSession()) return false; // no hay sesión, no se manda nada
+      if (!ptGetEmergencyEmail()) {
+        const profile = ptGetMyProfile();
+        const malo = (profile && profile.alertEmail) || ptGetSession().email || '(vacío)';
+        ptMailStatus(false, 'El email de alertas "' + malo + '" no es válido. Corregilo en "Editar perfil".');
+        return false;
+      }
       if (!window.emailjs || EMAILJS_PUBLIC_KEY === 'TU_PUBLIC_KEY' || EMAILJS_TEMPLATE_ID === 'TU_TEMPLATE_ID') {
         console.warn('MOON: falta configurar EmailJS (Service ID / Template ID / Public Key) o no cargó la librería.');
         ptMailStatus(false, 'EmailJS no está configurado o no cargó la librería.');
@@ -1722,7 +1756,7 @@
             ? ((err.status ? err.status + ' · ' : '') + (err.text || err.message))
             : 'error desconocido';
           console.error('MOON: error al enviar el mail de ' + job.label, err);
-          ptMailStatus(false, 'No se pudo enviar el mail de ' + job.label + ': ' + motivo);
+          ptMailStatus(false, 'No se pudo enviar el mail de ' + job.label + ' a "' + job.params.to_email + '": ' + motivo);
           if (job.onFail) job.onFail(); // permite reintentar en el próximo chequeo
         }
         await new Promise(r => setTimeout(r, EMAILJS_GAP_MS));
