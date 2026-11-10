@@ -33,7 +33,16 @@
 #define G_INTERVALO_MS 10          // lectura del acelerómetro (~100 por segundo)
 #define TEMP_CADA_CICLOS 30        // la temperatura casi no cambia: se lee cada ~30 s (bloquea ~30 ms)
 #define CICLOS_INVALIDOS_MAX 6     // ciclos (~1 s) sin lectura válida antes de borrar el último valor
-#define MIN_LECTURAS_MOSTRAR 1
+// ---- Arranque limpio (evita las lecturas malas del principio) ----
+// IR por debajo de esto = no hay dedo (o está mal apoyado). Con el dedo bien
+// puesto el IR suele andar entre 80000 y 250000; sin dedo, unos pocos miles.
+#define IR_DEDO_MIN 50000
+// Al apoyar el dedo, la señal tarda unos segundos en asentarse: se descartan
+// las muestras de este tiempo antes de empezar a medir.
+#define ESTABILIZAR_MS 4000
+// Lecturas válidas y parecidas entre sí que hacen falta para mostrar el
+// primer valor (antes era 1: mostraba la primera, que suele ser ruido).
+#define MIN_LECTURAS_MOSTRAR 2
 #define MAX_DIF_BPM  35
 #define MAX_DIF_SPO2 6
 #define USAR_MPU 1
@@ -257,7 +266,61 @@ void setup() {
   iniciarBLE();
 }
 
+// ---- Detección de dedo ----
+bool dedoListo = false;      // true = dedo apoyado y señal ya estabilizada
+uint32_t dedoDesde = 0;      // cuándo se apoyó el dedo (0 = no hay dedo)
+
+// Borra todo lo medido: se llama cuando se saca el dedo
+void reiniciarMedicion() {
+  dedoListo = false;
+  dedoDesde = 0;
+  primerLlenado = false;
+  ultimoSpo2 = 0;
+  ultimoBpm = 0;
+  lecturasGuardadas = 0;
+  readingIndex = 0;
+  ciclosInvalidos = 0;
+}
+
+// Espera la próxima muestra del sensor (sin dejar de leer g ni de mandar
+// por BLE). Devuelve false si el sensor no responde.
+bool tomarMuestra(uint32_t &red, uint32_t &ir) {
+  uint32_t t0 = millis();
+  while (!particleSensor.available()) {
+    tareasRapidas();
+    particleSensor.check();
+    if (millis() - t0 > 2000) {
+      LOG("El sensor de pulso no entrega muestras. Revisá cables y alimentación.\n");
+      return false;
+    }
+    delay(1);   // cede la CPU: deja dormir al procesador entre muestras
+  }
+  red = particleSensor.getRed();
+  ir  = particleSensor.getIR();
+  particleSensor.nextSample();
+  return true;
+}
+
 void loop() {
+  uint32_t red, ir;
+
+  // ---- 1) Esperar a que haya dedo y que la señal se asiente ----
+  if (!dedoListo) {
+    if (!tomarMuestra(red, ir)) return;
+    if (ir < IR_DEDO_MIN) {          // todavía no hay dedo
+      dedoDesde = 0;
+      return;
+    }
+    if (dedoDesde == 0) {
+      dedoDesde = millis();
+      LOG("Dedo detectado, estabilizando la señal...\n");
+    }
+    if (millis() - dedoDesde < ESTABILIZAR_MS) return;   // descarta estas muestras
+    dedoListo = true;
+    primerLlenado = false;
+    LOG("Señal estable, empiezo a medir.\n");
+  }
+
   int inicio = 0;
 
   if (!primerLlenado) {
@@ -272,20 +335,15 @@ void loop() {
 
   // ---- Tomar muestras nuevas ----
   for (int i = inicio; i < bufferLength; i++) {
-    uint32_t t0 = millis();
-    while (!particleSensor.available()) {
-      tareasRapidas();   // mientras espera sigue leyendo g y mandando por BLE
-      particleSensor.check();
-      if (millis() - t0 > 2000) {
-        LOG("El sensor de pulso no entrega muestras. Revisá cables y alimentación.\n");
-        primerLlenado = false;
-        return;
-      }
-      delay(1);   // cede la CPU: deja dormir al procesador entre muestras
+    if (!tomarMuestra(red, ir)) { primerLlenado = false; return; }
+    if (ir < IR_DEDO_MIN) {
+      // Se sacó el dedo: no se mezclan muestras sin dedo con las buenas
+      LOG("Dedo retirado, se borra la medición.\n");
+      reiniciarMedicion();
+      return;
     }
-    redBuffer[i] = particleSensor.getRed();
-    irBuffer[i]  = particleSensor.getIR();
-    particleSensor.nextSample();
+    redBuffer[i] = red;
+    irBuffer[i]  = ir;
   }
   primerLlenado = true;
 
