@@ -102,7 +102,9 @@
 #define SCL_PIN 9
 
 #if DEBUG
-  #define LOG(...)   Serial.printf(__VA_ARGS__)
+  // Solo imprime si hay una compu escuchando: con batería (sin USB) imprimir
+  // puede trabar el programa y hacer perder muestras del sensor.
+  #define LOG(...)   do { if (Serial) Serial.printf(__VA_ARGS__); } while (0)
 #else
   #define LOG(...)   do {} while (0)
 #endif
@@ -160,9 +162,11 @@ MAX30105 particleSensor;
 int ultimoSpo2 = 0;          // 0 = sin lectura válida
 int ultimoBpm = 0;
 float ultimaTemp = 0.0f;
-float gReportado = 1.0f;
-float accX = 0, accY = 0, accZ = 1;   // última aceleración por eje (en g)     // pico de aceleración desde el último envío (1.0 = quieto)
+float gReportado = 1.0f;     // pico de aceleración desde el último envío (1.0 = quieto)
+float accX = 0, accY = 0, accZ = 1;   // última aceleración por eje (en g)
 uint32_t ultimoMovimiento = 0;
+bool pulsoOk = false;        // ¿se encontró el MAX30102?
+bool mpuOk = false;          // ¿se encontró el MPU6050?
 
 // ---------------- MPU6050 ----------------
 #if USAR_MPU
@@ -177,6 +181,16 @@ void mpuEscribir(uint8_t reg, uint8_t val) {
 }
 
 void iniciarMPU() {
+  // WHO_AM_I (registro 0x75) tiene que responder 0x68: así sabemos que está conectado
+  Wire.beginTransmission(MPU6050_ADDR);
+  Wire.write(0x75);
+  uint8_t quien = 0;
+  if (Wire.endTransmission(false) == 0 && Wire.requestFrom((uint16_t)MPU6050_ADDR, (uint8_t)1, true) == 1) quien = Wire.read();
+  mpuOk = (quien == 0x68 || quien == 0x70 || quien == 0x72 || quien == 0x98);   // 0x68 original; otros = clones compatibles
+  if (!mpuOk) {
+    LOG("ATENCIÓN: no se encontró el MPU6050 (respondió 0x%02X). Sin él no hay detección de caídas ni cancelación de movimiento. Revisá el cableado.\n", quien);
+    return;
+  }
   mpuEscribir(0x6B, 0x00);   // PWR_MGMT_1: despertar
 #if USAR_GIROSCOPIO
   mpuEscribir(0x6C, 0x00);   // PWR_MGMT_2: acelerómetro y giroscopio prendidos
@@ -226,6 +240,7 @@ void actualizarG() {
   uint32_t ahora = millis();
   if (ahora - ultimo < G_INTERVALO_MS) return;
   ultimo = ahora;
+  if (!mpuOk) return;
   float g = leerG();
   float desvio = fabsf(g - 1.0f);
   if (desvio > fabsf(gReportado - 1.0f)) gReportado = g;
@@ -412,8 +427,15 @@ float cancelarMovimiento(float pulso, float ax, float ay, float az) {
   float y = 0, potencia = 0;
   for (int i = 0; i < NLMS_N; i++) { y += nlmsW[i] * nlmsX[i]; potencia += nlmsX[i] * nlmsX[i]; }
   float limpio = pulso - y;              // lo que queda = pulso sin el movimiento
-  float paso = NLMS_MU * limpio / (potencia + 1e-4f);
-  for (int i = 0; i < NLMS_N; i++) nlmsW[i] += paso * nlmsX[i];
+  if (millis() - ultimoMovimiento < 2000) {
+    // Aprende solo cuando hay movimiento: quieto, el acelerómetro solo tiene
+    // ruido y el filtro aprendería cualquier cosa (y después, al moverse,
+    // restaría de más).
+    float paso = NLMS_MU * limpio / (potencia + 1e-2f);
+    for (int i = 0; i < NLMS_N; i++) nlmsW[i] += paso * nlmsX[i];
+  } else {
+    for (int i = 0; i < NLMS_N; i++) nlmsW[i] *= 0.999f;   // olvida de a poco
+  }
   return limpio;
 }
 
@@ -443,6 +465,7 @@ float potenciaEn(const float *v, float f) {
 void leerSensor();     // están más abajo
 void actualizarG();
 
+uint32_t generacion = 0;         // cambia cada vez que se reinicia la señal
 float bpmSeguido = 0;            // pulso que se viene siguiendo por frecuencia
 uint32_t bpmSeguidoMs = 0;       // cuándo se confirmó por última vez
 float confianzaEspectro = 0;     // qué tan claro es el pico (para el diagnóstico)
@@ -464,6 +487,7 @@ int candidatoVeces = 0;   // 3 análisis seguidos que coincidan
 // Se llama una vez por segundo con la ventana llena
 void analizarFrecuencias(bool moviendose) {
   if (histLlenas < ESPECTRO_N) return;
+  const uint32_t gen = generacion;   // si durante el análisis se saca la pulsera, se descarta
   for (int i = 0; i < ESPECTRO_N; i++) {
     int j = (histIdx + i) % ESPECTRO_N;
     copiaPulso[i] = histPulso[j];
@@ -482,6 +506,7 @@ void analizarFrecuencias(bool moviendose) {
     // se siguen leyendo los sensores para no perder muestras
     leerSensor();
     actualizarG();
+    if (gen != generacion) return;   // se reinició la señal (sin contacto, saturación...)
   }
   // Se "apagan" las frecuencias del brazo (y su doble y su mitad)
   for (int k = 0; k < N_FREC; k++) {
@@ -512,18 +537,21 @@ void analizarFrecuencias(bool moviendose) {
   // en vez de correrlo hacia un valor equivocado.
   if (moviendose && bpmSeguido > 0 &&
       (cercaDelBrazo(bpmSeguido / 60.0f, fBrazo, 0.2f) || cercaDelBrazo(fMax, fBrazo, 0.2f))) return;
-  if (bpmSeguido == 0 && moviendose) {
-    if (confianzaEspectro < 6.0f || cercaDelBrazo(fMax, fBrazo) || fabsf(fMax - fBrazo) <= 0.25f) return;
+  if (bpmSeguido == 0) {
+    // Para engancharse por primera vez (sin un pulso previo):
+    if (confianzaEspectro < (moviendose ? 6.0f : 4.0f)) return;
+    if (moviendose && (cercaDelBrazo(fMax, fBrazo) || fabsf(fMax - fBrazo) <= 0.25f)) return;
     // ¿Es un "eco" al doble de otro ritmo? (la onda del pulso y el movimiento
     // tienen ecos al doble de su ritmo). Si a la mitad hay fuerza, o la mitad
     // coincide con el brazo, no se arriesga.
     int kMitad = (int)lroundf((fMax / 2 - F_MIN) / F_PASO);
-    if (kMitad >= 0 && (Porig[kMitad] > 0.25f * Porig[kMax] || fabsf(fMax / 2 - fBrazo) <= 0.15f)) return;
-    // tiene que repetirse 3 veces seguidas (±6 bpm) antes de creerle
+    if (kMitad >= 0 && Porig[kMitad] > 0.25f * Porig[kMax]) return;
+    if (moviendose && kMitad >= 0 && fabsf(fMax / 2 - fBrazo) <= 0.15f) return;
+    // tiene que repetirse varias veces seguidas (±6 bpm) antes de creerle
     float bpmCand = fMax * 60.0f;
     if (fabsf(bpmCand - candidatoBpm) <= 6.0f) candidatoVeces++;
     else { candidatoBpm = bpmCand; candidatoVeces = 1; }
-    if (candidatoVeces < 3) return;
+    if (candidatoVeces < (moviendose ? 3 : 2)) return;
   }
   candidatoVeces = 0;
   if (confianzaEspectro < 2.5f) return;          // pico poco claro: no se actualiza
@@ -538,11 +566,13 @@ void analizarFrecuencias(bool moviendose) {
   }
   // la ventana se tomó con la frecuencia nominal; se corrige con la real
   float bpm = (F_MIN + (kMax + d) * F_PASO) * 60.0f * (fsReal / FS_NOMINAL);
+  if (bpm < BPM_MIN || bpm > BPM_MAX) return;
   bpmSeguido = (bpmSeguido == 0) ? bpm : 0.7f * bpmSeguido + 0.3f * bpm;
   bpmSeguidoMs = millis();
 }
 
 void reiniciarMovimiento() {
+  generacion++;
   bpPulso.reiniciar(); bpAx.reiniciar(); bpAy.reiniciar(); bpAz.reiniciar();
   memset(nlmsX, 0, sizeof(nlmsX)); memset(nlmsW, 0, sizeof(nlmsW));
   mediaCuad[0] = mediaCuad[1] = mediaCuad[2] = 0;
@@ -622,6 +652,7 @@ void registrarLatido(uint32_t muestraPico) {
 
 // Decide qué pulso mostrar (se llama una vez por segundo)
 void actualizarSalida(bool moviendose) {
+  if (!hayContacto) return;          // sin la pulsera puesta no se muestra nada
   uint32_t ahora = millis();
   if (!moviendose && bpmLatidos) {
     // Quieto: el pulso latido a latido es el más preciso. Además "enseña"
@@ -657,6 +688,11 @@ void procesarMuestra(uint32_t rojo, uint32_t ir) {
   if (!hayContacto) {
     hayContacto = true;
     contactoDesde = millis();
+    if (brilloLed != LED_BRILLO_MAX) {   // si antes se había bajado, vuelve al máximo
+      brilloLed = LED_BRILLO_MAX;
+      particleSensor.setPulseAmplitudeRed(brilloLed);
+      particleSensor.setPulseAmplitudeIR(brilloLed);
+    }
     reiniciarSenal();
     LOG("Contacto detectado, estabilizando...\n");
   }
@@ -666,6 +702,8 @@ void procesarMuestra(uint32_t rojo, uint32_t ir) {
     if (++muestrasSaturadas >= 10 && brilloLed > LED_BRILLO_MIN) {
       muestrasSaturadas = 0;
       cambiarBrillo(brilloLed - 32 < LED_BRILLO_MIN ? LED_BRILLO_MIN : brilloLed - 32);
+    } else if (muestrasSaturadas % 250 == 0) {   // cada ~5 s
+      LOG("ATENCIÓN: el sensor sigue saturado aun con el LED al mínimo (entra mucha luz de afuera?)\n");
     }
     return;
   }
@@ -707,6 +745,7 @@ void procesarMuestra(uint32_t rojo, uint32_t ir) {
 
 // Lee todas las muestras nuevas del sensor, en orden
 void leerSensor() {
+  if (!pulsoOk) return;
   particleSensor.check();
   while (particleSensor.available()) {
     procesarMuestra(particleSensor.getFIFORed(), particleSensor.getFIFOIR());
@@ -717,11 +756,14 @@ void leerSensor() {
 // Mide cuántas muestras por segundo entrega el sensor de verdad, para que
 // los BPM salgan bien aunque el módulo no sea exacto (por esto antes había
 // que restarle 45 BPM a mano).
+bool reiniciarMedidaFs = true;   // se pone en true cuando el sensor (re)arranca
+
 void medirFrecuencia() {
   static uint32_t t0 = 0, n0 = 0;
   static bool primeraVez = true;
   uint32_t ahora = millis();
-  if (t0 == 0) { t0 = ahora; n0 = nMuestra; return; }
+  if (!pulsoOk) return;            // sin sensor no hay muestras que contar
+  if (reiniciarMedidaFs) { reiniciarMedidaFs = false; t0 = ahora; n0 = nMuestra; primeraVez = true; return; }
   // La primera medición se hace rápido (2 s) y se usa directo; después se
   // va afinando cada 5 s.
   if (ahora - t0 < (primeraVez ? 2000u : 5000u)) return;
@@ -732,6 +774,23 @@ void medirFrecuencia() {
     primeraVez = false;
   }
   t0 = ahora; n0 = nMuestra;
+}
+
+bool iniciarSensorPulso() {
+  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
+    LOG("No se encontró el MAX30102. Revisá el cableado (sigo buscándolo; las caídas funcionan igual).\n");
+    pulsoOk = false;
+    return false;
+  }
+  // ledMode 2 = rojo + infrarrojo
+  particleSensor.setup(LED_BRILLO_MAX, SENSOR_PROMEDIO, 2, SENSOR_SAMPLE_RATE,
+                       SENSOR_ANCHO_PULSO, SENSOR_RANGO_ADC);
+  brilloLed = LED_BRILLO_MAX;
+  LOG("MAX30102 listo: LED al máximo (%d), %d muestras/s.\n", LED_BRILLO_MAX, (int)FS_NOMINAL);
+  pulsoOk = true;
+  particleSensor.clearFIFO();     // se descartan muestras viejas del arranque
+  reiniciarMedidaFs = true;       // y se vuelve a medir la velocidad del sensor
+  return true;
 }
 
 void setup() {
@@ -747,16 +806,9 @@ void setup() {
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setTimeOut(50);
 
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
-    while (1) {
-      LOG("No se encontró el MAX30102. Revisá el cableado.\n");
-      delay(1000);
-    }
-  }
-  // ledMode 2 = rojo + infrarrojo
-  particleSensor.setup(LED_BRILLO_MAX, SENSOR_PROMEDIO, 2, SENSOR_SAMPLE_RATE,
-                       SENSOR_ANCHO_PULSO, SENSOR_RANGO_ADC);
-  LOG("MAX30102 listo: LED al máximo (%d), %d muestras/s.\n", LED_BRILLO_MAX, (int)FS_NOMINAL);
+  // Si el MAX30102 no aparece, la pulsera NO se queda trabada: sigue con
+  // Bluetooth y detección de caídas, y vuelve a buscarlo cada 5 s.
+  iniciarSensorPulso();
 
   canalIR.filtro.pasaBajos(4.0f, FS_NOMINAL);
   canalRojo.filtro.pasaBajos(4.0f, FS_NOMINAL);
@@ -771,6 +823,13 @@ void setup() {
 }
 
 void loop() {
+  // Si el MAX30102 no estaba, se lo vuelve a buscar cada 5 s
+  static uint32_t ultimoIntento = 0;
+  if (!pulsoOk && millis() - ultimoIntento > 5000) {
+    ultimoIntento = millis();
+    iniciarSensorPulso();
+  }
+
   actualizarG();
   leerSensor();
   medirFrecuencia();
@@ -793,9 +852,10 @@ void loop() {
 
   // Temperatura (bloquea ~30 ms, por eso se lee poco)
   static uint32_t ultimaLecturaTemp = 0;
-  if (ultimaLecturaTemp == 0 || ahora - ultimaLecturaTemp > TEMP_INTERVALO_MS) {
+  if (pulsoOk && (ultimaLecturaTemp == 0 || ahora - ultimaLecturaTemp > TEMP_INTERVALO_MS)) {
     ultimaLecturaTemp = ahora;
     ultimaTemp = particleSensor.readTemperature();
+    leerSensor();   // se leen enseguida las muestras que llegaron mientras tanto
   }
 
 #if DEBUG
@@ -808,9 +868,11 @@ void loop() {
         (ahora - ultimoMovimiento < 2000) ? "MOVIMIENTO" : "quieto",
         ultimoBpm, ultimoSpo2);
   #if USAR_MPU && USAR_GIROSCOPIO
-    float gx, gy, gz;
-    leerGiroscopio(gx, gy, gz);
-    LOG("Gyro X:%.2f Y:%.2f Z:%.2f deg/s\n", gx, gy, gz);
+    if (mpuOk) {
+      float gx, gy, gz;
+      leerGiroscopio(gx, gy, gz);
+      LOG("Gyro X:%.2f Y:%.2f Z:%.2f deg/s\n", gx, gy, gz);
+    }
   #endif
   }
 #endif
