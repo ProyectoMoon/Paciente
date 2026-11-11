@@ -15,6 +15,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <!-- Firebase: cuentas y perfiles en la nube (para entrar desde cualquier dispositivo) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -793,7 +797,7 @@
         <div class="divider-line">o</div>
         <div class="pt-switch">¿No tenés cuenta? <button type="button" onclick="ptShowView('pt-registerView')">Crear una cuenta →</button></div>
       </div>
-      <p class="hint-box" style="margin-top:1.6rem;">Los datos se guardan solo en tu navegador.</p>
+      <p class="hint-box" id="pt-storageHint" style="margin-top:1.6rem;">Los datos se guardan solo en tu navegador.</p>
       <a href="https://wa.me/5491136744453" target="_blank" rel="noopener noreferrer" class="pt-help-link">¿Problemas para ingresar? Escribinos</a>
     </div>
 
@@ -1088,6 +1092,104 @@
     }
 
     // ---- Sesión y usuarios (demo, guardado en el navegador) ----
+    // ==========================================================================
+    // CUENTAS EN LA NUBE (Firebase)
+    // ==========================================================================
+    /* -------------------------------------------------------------------
+       Con Firebase configurado, las cuentas y el perfil del paciente se
+       guardan en la nube: entrás con el mismo email y contraseña desde
+       cualquier celular o compu.
+       Si FIREBASE_CONFIG no está completo, la página funciona como antes
+       (todo guardado solo en este navegador).
+
+       Cómo configurarlo (gratis, una sola vez):
+       1. https://console.firebase.google.com -> "Agregar proyecto".
+       2. Compilación -> Authentication -> Comenzar -> activar
+          "Correo electrónico/contraseña".
+       3. Authentication -> Configuración -> Dominios autorizados ->
+          agregar: proyectomoon.github.io
+       4. Compilación -> Firestore Database -> Crear base de datos
+          (modo producción). En "Reglas" pegar:
+            rules_version = '2';
+            service cloud.firestore {
+              match /databases/{database}/documents {
+                match /pacientes/{uid} {
+                  allow read, write: if request.auth != null && request.auth.uid == uid;
+                }
+              }
+            }
+       5. Configuración del proyecto (engranaje) -> "Tus apps" -> ícono
+          web </> -> registrar app -> copiar los valores de firebaseConfig
+          acá abajo.
+       (Estos valores NO son secretos: está bien que estén en la página.
+       Lo que protege los datos son las reglas del paso 4.)
+    ------------------------------------------------------------------- */
+    const FIREBASE_CONFIG = {
+      apiKey:            'TU_API_KEY',
+      authDomain:        'TU_PROYECTO.firebaseapp.com',
+      projectId:         'TU_PROYECTO',
+      storageBucket:     'TU_PROYECTO.appspot.com',
+      messagingSenderId: '',
+      appId:             ''
+    };
+
+    let ptAuth = null, ptDb = null;
+    const ptNube = (function () {
+      if (FIREBASE_CONFIG.apiKey === 'TU_API_KEY' || !window.firebase) return false;
+      try {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        ptAuth = firebase.auth();
+        ptDb = firebase.firestore();
+        return true;
+      } catch (e) {
+        console.error('MOON: no se pudo iniciar Firebase', e);
+        return false;
+      }
+    })();
+    if (ptNube) {
+      document.getElementById('pt-storageHint').textContent =
+        'Tu cuenta se guarda en la nube: entrá desde cualquier dispositivo.';
+    }
+
+    // Perfil en la nube: un documento por usuario en "pacientes/<uid>".
+    // No se guardan los signos vitales (cambian cada medio segundo).
+    async function ptNubeLeerPerfil(uid) {
+      const doc = await ptDb.collection('pacientes').doc(uid).get();
+      return doc.exists ? doc.data() : null;
+    }
+    async function ptNubeGuardarPerfil(profile) {
+      const user = ptAuth && ptAuth.currentUser;
+      if (!user) return;
+      const datos = Object.assign({}, profile);
+      delete datos.vitals;
+      await ptDb.collection('pacientes').doc(user.uid).set(datos);
+    }
+
+    // Trae el perfil de la nube y lo deja en este navegador
+    async function ptNubeSincronizarPerfil(user) {
+      const perfil = await ptNubeLeerPerfil(user.uid);
+      if (!perfil) return null;
+      const profiles = ptGetProfiles();
+      const local = profiles[user.email] || {};
+      profiles[user.email] = Object.assign({}, perfil, { vitals: local.vitals || null });
+      ptSaveProfiles(profiles);
+      return profiles[user.email];
+    }
+
+    // Mensajes de error de Firebase en castellano
+    function ptNubeError(err) {
+      const c = err && err.code || '';
+      if (c === 'auth/email-already-in-use') return 'Ya existe una cuenta con ese email';
+      if (c === 'auth/invalid-email') return 'El email no es válido';
+      if (c === 'auth/weak-password') return 'La contraseña tiene que tener 6 caracteres o más';
+      if (c === 'auth/network-request-failed') return 'Sin conexión a internet. Probá de nuevo.';
+      if (c === 'auth/too-many-requests') return 'Demasiados intentos. Esperá unos minutos.';
+      if (c === 'auth/unauthorized-domain') return 'Falta autorizar este dominio en Firebase (Authentication > Configuración).';
+      if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials')
+        return 'Email o contraseña incorrectos.';
+      return 'Error: ' + (err && err.message || 'desconocido');
+    }
+
     function ptGetUsers() {
       try { return JSON.parse(localStorage.getItem('moon_users') || '{}'); } catch (e) { return {}; }
     }
@@ -1101,6 +1203,7 @@
     function ptSetSession(s) { localStorage.setItem('moon_session', JSON.stringify(s)); }
     function ptLogout() {
       localStorage.removeItem('moon_session');
+      if (ptNube) ptAuth.signOut().catch(() => {});
       document.getElementById('navUser').textContent = '';
       ptStopAlarmLoop();
       document.getElementById('pt-alarm-banner').style.display = 'none';
@@ -1142,6 +1245,24 @@
         errorEl.style.display = 'block';
         return;
       }
+      if (ptNube) {
+        errorEl.style.display = 'none';
+        ptSetLoading(submitBtn, 'Creando cuenta...');
+        ptAuth.createUserWithEmailAndPassword(email, pass)
+          .then(async (cred) => {
+            await cred.user.updateProfile({ displayName: name }).catch(() => {});
+            ptSetSession({ email: email, name: name, uid: cred.user.uid });
+            ptClearLoading(submitBtn);
+            ptRouteAfterAuth();
+          })
+          .catch((err) => {
+            ptClearLoading(submitBtn);
+            errorEl.textContent = ptNubeError(err);
+            errorEl.style.display = 'block';
+          });
+        return;
+      }
+
       const users = ptGetUsers();
       if (users[email]) {
         errorEl.textContent = 'Ya existe una cuenta con ese email';
@@ -1163,9 +1284,23 @@
       const errorEl = document.getElementById('pt-loginError');
       const submitBtn = e.target.querySelector('.pt-btn');
 
+      if (ptNube) {
+        errorEl.style.display = 'none';
+        ptSetLoading(submitBtn, 'Ingresando...');
+        ptNubeLogin(email, pass)
+          .then(() => { ptClearLoading(submitBtn); ptRouteAfterAuth(); })
+          .catch((err) => {
+            ptClearLoading(submitBtn);
+            errorEl.textContent = ptNubeError(err);
+            errorEl.style.display = 'block';
+          });
+        return;
+      }
+
       const users = ptGetUsers();
       const user = users[email];
       if (!user || user.pass !== pass) {
+        errorEl.textContent = 'Email o contraseña incorrectos.';
         errorEl.style.display = 'block';
         return;
       }
@@ -1174,6 +1309,30 @@
       ptSetSession({ email: email, name: user.name });
       setTimeout(() => { ptClearLoading(submitBtn); ptRouteAfterAuth(); }, 350);
     });
+
+    // Ingreso con la nube. Si la cuenta todavía no existe en la nube pero sí
+    // en este navegador (cuentas creadas antes), se pasa sola a la nube con
+    // la misma contraseña y el mismo perfil.
+    async function ptNubeLogin(email, pass) {
+      let cred;
+      try {
+        cred = await ptAuth.signInWithEmailAndPassword(email, pass);
+      } catch (err) {
+        const local = ptGetUsers()[email];
+        const noExiste = ['auth/invalid-credential', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(err.code);
+        if (!(noExiste && local && local.pass === pass)) throw err;
+        cred = await ptAuth.createUserWithEmailAndPassword(email, pass);   // migración
+        await cred.user.updateProfile({ displayName: local.name }).catch(() => {});
+        const perfilLocal = ptGetProfiles()[email];
+        ptSetSession({ email: email, name: local.name, uid: cred.user.uid });
+        if (perfilLocal) await ptNubeGuardarPerfil(perfilLocal);
+        const users = ptGetUsers(); delete users[email]; ptSaveUsers(users);  // ya no hace falta la copia local
+        return;
+      }
+      const name = cred.user.displayName || email.split('@')[0];
+      ptSetSession({ email: email, name: name, uid: cred.user.uid });
+      await ptNubeSincronizarPerfil(cred.user);
+    }
 
     // ---- Formulario de alta / edición del paciente ----
     function ptRenderSetupPills() {
@@ -1282,6 +1441,15 @@
         updatedAt: new Date().toISOString()
       };
       ptSaveMyProfile(profile);
+      if (ptNube) {
+        ptNubeGuardarPerfil(profile)
+          .catch((err) => {
+            console.error('MOON: no se pudo guardar el perfil en la nube', err);
+            alert('El perfil se guardó en este dispositivo, pero no en la nube (' + (err.code || err.message) + '). Revisá la conexión y volvé a guardar.');
+          })
+          .finally(() => { ptClearLoading(submitBtn); ptShowPanel(profile); });
+        return;
+      }
       setTimeout(() => { ptClearLoading(submitBtn); ptShowPanel(profile); }, 300);
     });
 
@@ -2214,7 +2382,28 @@
     }
 
     // ---- Punto de entrada ----
-    ptRouteAfterAuth();
+    if (ptNube) {
+      // Firebase recuerda la sesión. Al abrir la página se trae el perfil
+      // actualizado de la nube (por si se editó desde otro dispositivo).
+      // Mientras Firebase revisa si ya había una sesión, no se muestra el login
+      document.getElementById('pt-loginView').style.display = 'none';
+      let ptPrimeraVez = true;
+      ptAuth.onAuthStateChanged(async (user) => {
+        if (!ptPrimeraVez) return;
+        ptPrimeraVez = false;
+        if (!user) {
+          localStorage.removeItem('moon_session');   // sesión vieja sin cuenta en la nube
+          ptRouteAfterAuth();
+          return;
+        }
+        ptSetSession({ email: user.email, name: user.displayName || user.email.split('@')[0], uid: user.uid });
+        try { await ptNubeSincronizarPerfil(user); }
+        catch (e) { console.warn('MOON: sin conexión, se usa el perfil guardado en este dispositivo', e); }
+        ptRouteAfterAuth();
+      });
+    } else {
+      ptRouteAfterAuth();
+    }
   </script>
 
 </body>
