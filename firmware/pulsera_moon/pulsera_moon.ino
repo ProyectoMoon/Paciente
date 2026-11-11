@@ -71,8 +71,6 @@
 #define MOVIMIENTO_G 0.12f
 #define MOVIMIENTO_PAUSA_MS 1000
 
-#define MOON 
-
 #define USAR_MPU 1
 // 1 = giroscopio prendido (se lee y se imprime en el diagnóstico).
 // 0 = giroscopio apagado: ahorra ~3,5 mA. Hoy la web solo usa la
@@ -213,33 +211,12 @@ void actualizarG() {
 void actualizarG() {}
 #endif
 
-#if MOON
-void valoresMoon(int &bpm, int &spo2) {
-  static float bpmMoon = 75, spo2Moon = 98;
-  float t = millis() / 1000.0f;
-  float objetivoBpm = 75.0f + 4.0f * sinf(t * 0.21f) + 1.5f * sinf(t * 0.73f);
-  bpmMoon += (objetivoBpm - bpmMoon) * 0.3f + (random(-10, 11) / 20.0f);
-  float objetivoSpo2 = 98.0f + 0.8f * sinf(t * 0.05f);
-  spo2Moon += (objetivoSpo2 - spo2Moon) * 0.2f + (random(-10, 11) / 40.0f);
-  if (spo2Moon > 99.4f) spo2Moon = 99.4f;
-  if (spo2Moon < 96.6f) spo2Moon = 96.6f;
-  bpm = (int)lroundf(bpmMoon);
-  spo2 = (int)lroundf(spo2Moon);
-}
-#endif
-
 void enviarPeriodico() {
   static uint32_t ultimoEnvio = 0;
   uint32_t ahora = millis();
   if (ahora - ultimoEnvio < BLE_INTERVALO_MS) return;
   ultimoEnvio = ahora;
-#if Moon
-  int bpm, spo2;
-  valoresMoon(bpm, spo2);
-  enviarVitalesBLE(spo2, bpm, ultimaTemp, gReportado);
-#else
   enviarVitalesBLE(ultimoSpo2, ultimoBpm, ultimaTemp, gReportado);
-#endif
   gReportado = 1.0f;
 }
 
@@ -509,9 +486,6 @@ void setup() {
   while (!Serial && millis() - t < 2000) delay(10);
 #endif
   LOG("Arrancando...\n");
-#if Moon
-  LOG("*** Se mandan valores Vitales  ***\n");
-#endif
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setTimeOut(50);
@@ -562,9 +536,6 @@ void loop() {
   static uint32_t ultimoLog = 0;
   if (ahora - ultimoLog >= 1000) {
     ultimoLog = ahora;
-  #if MODO_DEMO
-    { int b, o; valoresDemo(b, o); LOG("[DEMO] BPM:%d  SpO2:%d  (sensor real abajo)\n", b, o); }
-  #endif
     float pi = canalIR.dc > 0 ? 100.0f * envolvente / canalIR.dc : 0;
     LOG("IR:%lu  LED:%d  fs:%.1f  señal:%.3f%%  latidos:%d  %s  BPM:%d  SpO2:%d\n",
         (unsigned long)canalIR.dc, brilloLed, fsReal, pi, nLatidos,
