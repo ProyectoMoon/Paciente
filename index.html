@@ -1538,8 +1538,10 @@
       else if (spo2 < PT_SPO2_NORMAL) spo2State = 'warning';
       else spo2State = 'ok';
 
-      if (bpm > 130) bpmState = 'danger';
-      else if (bpm > 100) bpmState = 'warning';
+      // BPM: 60-100 = normal | 50-59 y 101-120 = irregular |
+      //      menos de 50 o más de 120 = crítico (alarma + mail)
+      if (bpm < PT_BPM_CRITICO_BAJO || bpm > PT_BPM_CRITICO_ALTO) bpmState = 'danger';
+      else if (bpm < PT_BPM_NORMAL_MIN || bpm > PT_BPM_NORMAL_MAX) bpmState = 'warning';
       else bpmState = 'ok';
 
       const estadoPrevio = { spo2: ptAlarmState.spo2, bpm: ptAlarmState.bpm };
@@ -1560,6 +1562,12 @@
     // Límites de oxígeno en sangre (SpO2, en %)
     const PT_SPO2_NORMAL  = 95;  // desde acá para arriba: Normal
     const PT_SPO2_CRITICO = 82;  // por debajo de este valor: Crítico (suena la alarma y se manda el mail)
+
+    // Límites de frecuencia cardíaca (BPM / lpm)
+    const PT_BPM_NORMAL_MIN   = 60;   // Normal: de 60...
+    const PT_BPM_NORMAL_MAX   = 100;  // ...a 100
+    const PT_BPM_CRITICO_BAJO = 50;   // menos de 50: Crítico (alarma + mail)
+    const PT_BPM_CRITICO_ALTO = 120;  // más de 120: Crítico (alarma + mail)
 
     function ptSetVital(id, state, pct, color) {
       const card = document.getElementById('pt-card-'+id);
@@ -1599,7 +1607,7 @@
       }
 
       if (sb === 'danger') {
-        if (bpm > 120) diags.push({ cls:'danger', icon:'ti-heart-off', title:'Taquicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. Riesgo de fallo cardíaco. Actuar de inmediato.` });
+        if (bpm > PT_BPM_NORMAL_MAX) diags.push({ cls:'danger', icon:'ti-heart-off', title:'Taquicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. Riesgo de fallo cardíaco. Actuar de inmediato.` });
         else diags.push({ cls:'danger', icon:'ti-heart-off', title:'Bradicardia severa', body:`Frecuencia cardíaca de ${bpm} bpm. El corazón no bombea suficiente sangre. Atención urgente.` });
       } else if (sb === 'warning') {
         const msg = patientActive.has('arritmia')
