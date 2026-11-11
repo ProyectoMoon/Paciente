@@ -10,8 +10,10 @@
 //   - NO usa el algoritmo de Maxim (spo2_algorithm.h), que en la muñeca
 //     casi siempre da "no válido". En su lugar filtra la señal y detecta
 //     cada latido uno por uno;
-//   - descarta los latidos medidos mientras la muñeca se mueve (lo
-//     sabe por el MPU6050), que es lo que más arruina la lectura.
+//   - con movimiento (siempre hay, es una pulsera): resta el movimiento
+//     que mide el MPU6050 de la señal del pulso (filtro adaptativo) y
+//     sigue el pulso por frecuencia, ignorando el ritmo del brazo.
+//     El SpO2 se mide con la muñeca quieta y se mantiene mientras tanto.
 //
 //  Lo que se manda a la web NO cambia: "spo2,bpm,temp,g" cada 500 ms
 //  por BLE (mismos UUID), así que la página sigue funcionando igual.
@@ -64,12 +66,31 @@
 #define LATIDOS_GUARDADOS 8        // se usa la mediana de los últimos 8 latidos
 #define LATIDOS_PARA_MOSTRAR 4     // latidos coherentes antes de mostrar el primer valor
 #define TOLERANCIA_LATIDO 0.30f    // un latido nuevo puede diferir hasta 30% de la mediana
-#define SIN_LATIDO_MS 6000         // si pasa este tiempo sin un latido bueno, se borra el valor
+#define SIN_LATIDO_MS 6000         // sin un latido bueno en este tiempo se reinicia el detector
 
 // Movimiento: si la aceleración se aparta de 1 g más que esto, se considera
-// que la muñeca se movió y se descartan los latidos de ese momento.
+// que la muñeca se está moviendo.
 #define MOVIMIENTO_G 0.12f
 #define MOVIMIENTO_PAUSA_MS 1000
+
+// ---- Medición con movimiento (es una pulsera: siempre hay movimiento) ----
+// 1) Cancelación de movimiento: un filtro adaptativo (NLMS) aprende cuánto
+//    del movimiento que mide el MPU6050 se "mete" en la señal del pulso y
+//    lo resta.
+// 2) Pulso por frecuencia: cada segundo se mira qué ritmos hay en los
+//    últimos 8 s de señal. Se descarta el ritmo del brazo (el que también
+//    ve el acelerómetro) y se sigue el ritmo del corazón de un segundo al
+//    siguiente.
+// 3) El SpO2 solo se actualiza con la muñeca quieta (como los relojes):
+//    con movimiento no es confiable. Mientras tanto se mantiene el último.
+#define NLMS_TAPS 6                // memoria del filtro (muestras por eje)
+#define NLMS_MU 0.03f              // velocidad de aprendizaje
+#define ESPECTRO_SEG 8             // segundos de señal que se analizan
+#define ESPECTRO_FS 25             // la señal se reduce a 25 muestras/s para analizar
+#define HR_SALTO_MAX 15            // BPM que puede cambiar el pulso de un segundo a otro
+#define PULSO_RETENER_MS 10000     // sin una lectura confiable, el último pulso dura esto
+#define SPO2_RETENER_MS 120000     // el último SpO2 (medido quieto) dura esto
+#define SIN_CONTACTO_MUESTRAS 25   // ~0,5 s seguidos sin piel para dar por perdido el contacto
 
 #define USAR_MPU 1
 // 1 = giroscopio prendido (se lee y se imprime en el diagnóstico).
@@ -139,7 +160,8 @@ MAX30105 particleSensor;
 int ultimoSpo2 = 0;          // 0 = sin lectura válida
 int ultimoBpm = 0;
 float ultimaTemp = 0.0f;
-float gReportado = 1.0f;     // pico de aceleración desde el último envío (1.0 = quieto)
+float gReportado = 1.0f;
+float accX = 0, accY = 0, accZ = 1;   // última aceleración por eje (en g)     // pico de aceleración desde el último envío (1.0 = quieto)
 uint32_t ultimoMovimiento = 0;
 
 // ---------------- MPU6050 ----------------
@@ -193,8 +215,10 @@ float leerG() {
   int16_t x = Wire.read() << 8 | Wire.read();
   int16_t y = Wire.read() << 8 | Wire.read();
   int16_t z = Wire.read() << 8 | Wire.read();
-  float m2 = (float)x * x + (float)y * y + (float)z * z;
-  return sqrtf(m2) * (1.0f / ACCEL_SENSITIVITY);
+  accX = x * (1.0f / ACCEL_SENSITIVITY);   // se guardan los ejes para cancelar el movimiento
+  accY = y * (1.0f / ACCEL_SENSITIVITY);
+  accZ = z * (1.0f / ACCEL_SENSITIVITY);
+  return sqrtf(accX * accX + accY * accY + accZ * accZ);
 }
 
 void actualizarG() {
@@ -233,6 +257,13 @@ struct Biquad {
     float c = cosf(w0), al = sinf(w0) / (2.0f * 0.7071f);
     float a0 = 1.0f + al;
     b0 = (1.0f - c) / 2.0f / a0;  b1 = (1.0f - c) / a0;  b2 = b0;
+    a1 = -2.0f * c / a0;          a2 = (1.0f - al) / a0;
+  }
+  void pasaAltos(float fc, float fs) {
+    float w0 = 2.0f * (float)M_PI * fc / fs;
+    float c = cosf(w0), al = sinf(w0) / (2.0f * 0.7071f);
+    float a0 = 1.0f + al;
+    b0 = (1.0f + c) / 2.0f / a0;  b1 = -(1.0f + c) / a0;  b2 = b0;
     a1 = -2.0f * c / a0;          a2 = (1.0f - al) / a0;
   }
   float paso(float x) {
@@ -289,6 +320,8 @@ int nLatidos = 0, idxLatido = 0;
 int nR = 0, idxR = 0;                  // latidos limpios guardados para el SpO2
 int rechazosSeguidos = 0;
 uint32_t ultimoLatidoBueno = 0;
+int bpmLatidos = 0;                    // pulso medido latido a latido (muñeca quieta)
+uint32_t spo2Ms = 0;                   // cuándo se midió el último SpO2
 
 // Estado del detector
 uint32_t nMuestra = 0, muestraUltimoPico = 0;
@@ -310,11 +343,18 @@ float mediana(const float *v, int n) {
   return (n % 2) ? t[n / 2] : 0.5f * (t[n / 2 - 1] + t[n / 2]);
 }
 
+// Reinicia el detector latido a latido (no borra lo que se muestra)
 void borrarLatidos() {
   nLatidos = 0; idxLatido = 0; rechazosSeguidos = 0;
   nR = 0; idxR = 0;
-  ultimoSpo2 = 0; ultimoBpm = 0;
+  bpmLatidos = 0;
 }
+// Borra lo que se muestra (por ejemplo, al sacar la pulsera)
+void borrarSalida() {
+  ultimoSpo2 = 0; ultimoBpm = 0; spo2Ms = 0;
+}
+
+void reiniciarMovimiento();   // está más abajo
 
 void reiniciarSenal() {
   canalIR.reiniciar(); canalRojo.reiniciar();
@@ -322,6 +362,8 @@ void reiniciarSenal() {
   muestraUltimoPico = nMuestra;
   hayPicoPrevio = false;
   borrarLatidos();
+  borrarSalida();
+  reiniciarMovimiento();
 }
 
 void cambiarBrillo(uint8_t b) {
@@ -331,6 +373,183 @@ void cambiarBrillo(uint8_t b) {
   contactoDesde = millis();   // con brillo nuevo la señal tiene que volver a asentarse
   reiniciarSenal();
   LOG("IR saturado -> brillo LED baja a %d\n", b);
+}
+
+// =====================================================================
+//  CANCELACIÓN DE MOVIMIENTO Y PULSO POR FRECUENCIA
+// =====================================================================
+
+// Pasa-banda 0,5-4 Hz (30-240 bpm): deja solo la zona donde está el pulso
+struct PasaBanda {
+  Biquad pa, pb;
+  void configurar(float fs) { pa.pasaAltos(0.5f, fs); pb.pasaBajos(4.0f, fs); }
+  float paso(float x) { return pb.paso(pa.paso(x)); }
+  void reiniciar() { pa.reiniciar(); pb.reiniciar(); }
+};
+PasaBanda bpPulso, bpAx, bpAy, bpAz;
+
+// Filtro adaptativo NLMS. Referencias: los 3 ejes y los 3 ejes al cuadrado
+// (el movimiento no "ensucia" la señal de forma perfectamente proporcional:
+// los cuadrados capturan esa parte, que crea ritmos al doble del brazo).
+#define NLMS_REFS 6
+#define NLMS_N (NLMS_REFS * NLMS_TAPS)
+float nlmsX[NLMS_N];
+float nlmsW[NLMS_N];
+float mediaCuad[3] = {0, 0, 0};
+
+float cancelarMovimiento(float pulso, float ax, float ay, float az) {
+  float refs[NLMS_REFS] = { ax, ay, az, ax * ax, ay * ay, az * az };
+  for (int e = 0; e < 3; e++) {            // a los cuadrados se les saca el promedio
+    mediaCuad[e] += (refs[3 + e] - mediaCuad[e]) * 0.02f;
+    refs[3 + e] -= mediaCuad[e];
+  }
+  // corre la memoria y pone las muestras nuevas de cada referencia al principio
+  for (int e = 0; e < NLMS_REFS; e++) {
+    float *v = nlmsX + e * NLMS_TAPS;
+    memmove(v + 1, v, (NLMS_TAPS - 1) * sizeof(float));
+    v[0] = refs[e];
+  }
+  float y = 0, potencia = 0;
+  for (int i = 0; i < NLMS_N; i++) { y += nlmsW[i] * nlmsX[i]; potencia += nlmsX[i] * nlmsX[i]; }
+  float limpio = pulso - y;              // lo que queda = pulso sin el movimiento
+  float paso = NLMS_MU * limpio / (potencia + 1e-4f);
+  for (int i = 0; i < NLMS_N; i++) nlmsW[i] += paso * nlmsX[i];
+  return limpio;
+}
+
+// Historial reducido a 25 muestras/s para el análisis por frecuencia
+#define ESPECTRO_N (ESPECTRO_SEG * ESPECTRO_FS)
+float histPulso[ESPECTRO_N];
+float histAcc[3][ESPECTRO_N];
+int histIdx = 0, histLlenas = 0;
+float accumP = 0, accumA[3] = {0, 0, 0};
+int accumN = 0;
+
+// Rango de búsqueda: 42 a 180 bpm, de a 0,05 Hz (3 bpm), con interpolación
+#define F_MIN 0.70f
+#define F_PASO 0.05f
+#define N_FREC 47
+
+// Potencia de la señal v a la frecuencia f (algoritmo de Goertzel)
+float potenciaEn(const float *v, float f) {
+  float w = 2.0f * (float)M_PI * f / ESPECTRO_FS;
+  float coef = 2.0f * cosf(w), q1 = 0, q2 = 0;
+  for (int i = 0; i < ESPECTRO_N; i++) {
+    float q0 = coef * q1 - q2 + v[i];
+    q2 = q1; q1 = q0;
+  }
+  return q1 * q1 + q2 * q2 - coef * q1 * q2;
+}
+void leerSensor();     // están más abajo
+void actualizarG();
+
+float bpmSeguido = 0;            // pulso que se viene siguiendo por frecuencia
+uint32_t bpmSeguidoMs = 0;       // cuándo se confirmó por última vez
+float confianzaEspectro = 0;     // qué tan claro es el pico (para el diagnóstico)
+
+// Copia de la ventana en orden (así el sensor puede seguir leyéndose
+// mientras se analiza, sin mezclar datos)
+static float copiaPulso[ESPECTRO_N];
+static float copiaAcc[3][ESPECTRO_N];
+
+// ¿f está cerca del ritmo del brazo o de sus "ecos" (mitad, doble, triple)?
+// Margen de 0,15 Hz: con 8 s de señal, cada ritmo se "desparrama" ~0,125 Hz.
+bool cercaDelBrazo(float f, float fBrazo, float m = 0.15f) {
+  return fabsf(f - fBrazo) <= m || fabsf(f - 2 * fBrazo) <= m ||
+         fabsf(f - 3 * fBrazo) <= m || fabsf(f - 0.5f * fBrazo) <= m;
+}
+float candidatoBpm = 0;   // para engancharse con movimiento hacen falta
+int candidatoVeces = 0;   // 3 análisis seguidos que coincidan
+
+// Se llama una vez por segundo con la ventana llena
+void analizarFrecuencias(bool moviendose) {
+  if (histLlenas < ESPECTRO_N) return;
+  for (int i = 0; i < ESPECTRO_N; i++) {
+    int j = (histIdx + i) % ESPECTRO_N;
+    copiaPulso[i] = histPulso[j];
+    for (int e = 0; e < 3; e++) copiaAcc[e][i] = histAcc[e][j];
+  }
+  static float P[N_FREC], A[N_FREC], Porig[N_FREC];
+  float maxA = 1e-12f, sumaP = 0, fBrazo = 0;
+  for (int k = 0; k < N_FREC; k++) {
+    float f = F_MIN + k * F_PASO;
+    P[k] = potenciaEn(copiaPulso, f);
+    Porig[k] = P[k];
+    A[k] = 0;
+    if (moviendose) for (int e = 0; e < 3; e++) A[k] += potenciaEn(copiaAcc[e], f);
+    if (A[k] > maxA) { maxA = A[k]; fBrazo = f; }
+    // la ESP32-C3 calcula los decimales lento: entre frecuencia y frecuencia
+    // se siguen leyendo los sensores para no perder muestras
+    leerSensor();
+    actualizarG();
+  }
+  // Se "apagan" las frecuencias del brazo (y su doble y su mitad)
+  for (int k = 0; k < N_FREC; k++) {
+    float f = F_MIN + k * F_PASO;
+    if (moviendose) {
+      P[k] /= (1.0f + 10.0f * A[k] / maxA);
+      if (cercaDelBrazo(f, fBrazo)) P[k] *= 0.15f;
+    }
+    sumaP += P[k];
+  }
+  // Si ya veníamos siguiendo un pulso, se busca cerca de ese valor
+  int kIni = 0, kFin = N_FREC - 1;
+  if (bpmSeguido > 0) {
+    float fPrev = bpmSeguido / 60.0f, ancho = HR_SALTO_MAX / 60.0f;
+    kIni = (int)ceilf((fPrev - ancho - F_MIN) / F_PASO);
+    kFin = (int)floorf((fPrev + ancho - F_MIN) / F_PASO);
+    if (kIni < 0) kIni = 0;
+    if (kFin > N_FREC - 1) kFin = N_FREC - 1;
+  }
+  int kMax = kIni;
+  for (int k = kIni; k <= kFin; k++) if (P[k] > P[kMax]) kMax = k;
+  confianzaEspectro = P[kMax] / (sumaP / N_FREC + 1e-12f);
+  // Sin un pulso previo y con movimiento, se exige mucha más claridad y que no
+  // sea un ritmo del brazo: mejor no mostrar nada que un valor equivocado.
+  float fMax = F_MIN + kMax * F_PASO;
+  // Si el pulso que veníamos siguiendo (o el que se encontró) cae sobre el
+  // ritmo del brazo, no se pueden separar: se mantiene el último valor bueno
+  // en vez de correrlo hacia un valor equivocado.
+  if (moviendose && bpmSeguido > 0 &&
+      (cercaDelBrazo(bpmSeguido / 60.0f, fBrazo, 0.2f) || cercaDelBrazo(fMax, fBrazo, 0.2f))) return;
+  if (bpmSeguido == 0 && moviendose) {
+    if (confianzaEspectro < 6.0f || cercaDelBrazo(fMax, fBrazo) || fabsf(fMax - fBrazo) <= 0.25f) return;
+    // ¿Es un "eco" al doble de otro ritmo? (la onda del pulso y el movimiento
+    // tienen ecos al doble de su ritmo). Si a la mitad hay fuerza, o la mitad
+    // coincide con el brazo, no se arriesga.
+    int kMitad = (int)lroundf((fMax / 2 - F_MIN) / F_PASO);
+    if (kMitad >= 0 && (Porig[kMitad] > 0.25f * Porig[kMax] || fabsf(fMax / 2 - fBrazo) <= 0.15f)) return;
+    // tiene que repetirse 3 veces seguidas (±6 bpm) antes de creerle
+    float bpmCand = fMax * 60.0f;
+    if (fabsf(bpmCand - candidatoBpm) <= 6.0f) candidatoVeces++;
+    else { candidatoBpm = bpmCand; candidatoVeces = 1; }
+    if (candidatoVeces < 3) return;
+  }
+  candidatoVeces = 0;
+  if (confianzaEspectro < 2.5f) return;          // pico poco claro: no se actualiza
+  // interpolación parabólica para afinar entre dos frecuencias
+  float d = 0;
+  if (kMax > 0 && kMax < N_FREC - 1) {
+    float a = P[kMax - 1], b = P[kMax], c = P[kMax + 1];
+    float den = a - 2 * b + c;
+    if (den != 0) d = 0.5f * (a - c) / den;
+    if (d > 0.5f) d = 0.5f;
+    if (d < -0.5f) d = -0.5f;
+  }
+  // la ventana se tomó con la frecuencia nominal; se corrige con la real
+  float bpm = (F_MIN + (kMax + d) * F_PASO) * 60.0f * (fsReal / FS_NOMINAL);
+  bpmSeguido = (bpmSeguido == 0) ? bpm : 0.7f * bpmSeguido + 0.3f * bpm;
+  bpmSeguidoMs = millis();
+}
+
+void reiniciarMovimiento() {
+  bpPulso.reiniciar(); bpAx.reiniciar(); bpAy.reiniciar(); bpAz.reiniciar();
+  memset(nlmsX, 0, sizeof(nlmsX)); memset(nlmsW, 0, sizeof(nlmsW));
+  mediaCuad[0] = mediaCuad[1] = mediaCuad[2] = 0;
+  histIdx = 0; histLlenas = 0; accumP = 0; accumN = 0;
+  accumA[0] = accumA[1] = accumA[2] = 0;
+  bpmSeguido = 0; bpmSeguidoMs = 0;
+  candidatoBpm = 0; candidatoVeces = 0;
 }
 
 // Se llama cuando el detector encuentra un pico (un latido)
@@ -379,11 +598,11 @@ void registrarLatido(uint32_t muestraPico) {
   ultimoLatidoBueno = millis();
 
   if (nLatidos >= LATIDOS_PARA_MOSTRAR) {
-    ultimoBpm = (int)lroundf(60000.0f / mediana(intervalos, nLatidos));
-    // Curva de calibración de Maxim para el MAX30102. En la muñeca es
-    // aproximada: comparala con un oxímetro de dedo y ajustá si hace falta.
+    bpmLatidos = (int)lroundf(60000.0f / mediana(intervalos, nLatidos));
   }
-  if (ultimoBpm && nR >= 3) {
+  // Curva de calibración de Maxim para el MAX30102. En la muñeca es
+  // aproximada: comparala con un oxímetro de dedo y ajustá si hace falta.
+  if (bpmLatidos && nR >= 3) {
     float sR = 0, sI = 0;
     for (int i = 0; i < nR; i++) { sR += energiaRojo[i]; sI += energiaIR[i]; }
     if (sR <= 0 || sI <= 0) return;
@@ -397,7 +616,27 @@ void registrarLatido(uint32_t muestraPico) {
     // Valores muy bajos se mandan igual (con piso en 50) para que la web
     // pueda dar la alarma: nunca se esconde una lectura crítica.
     ultimoSpo2 = (int)lroundf(spo2Suave < 50 ? 50 : spo2Suave);
+    spo2Ms = millis();
   }
+}
+
+// Decide qué pulso mostrar (se llama una vez por segundo)
+void actualizarSalida(bool moviendose) {
+  uint32_t ahora = millis();
+  if (!moviendose && bpmLatidos) {
+    // Quieto: el pulso latido a latido es el más preciso. Además "enseña"
+    // al seguimiento por frecuencia dónde está el pulso.
+    ultimoBpm = bpmLatidos;
+    bpmSeguido = bpmLatidos;
+    bpmSeguidoMs = ahora;
+  } else if (bpmSeguido > 0 && ahora - bpmSeguidoMs < PULSO_RETENER_MS) {
+    // Con movimiento: el pulso que se sigue por frecuencia
+    ultimoBpm = (int)lroundf(bpmSeguido);
+  } else if (ultimoBpm && ahora - bpmSeguidoMs >= PULSO_RETENER_MS && ahora - ultimoLatidoBueno >= PULSO_RETENER_MS) {
+    ultimoBpm = 0;                     // hace mucho que no hay una lectura confiable
+    bpmSeguido = 0;
+  }
+  if (ultimoSpo2 && ahora - spo2Ms > SPO2_RETENER_MS) ultimoSpo2 = 0;
 }
 
 // Procesa UNA muestra del sensor (se llama 50 veces por segundo)
@@ -405,11 +644,16 @@ void procesarMuestra(uint32_t rojo, uint32_t ir) {
   nMuestra++;
 
   // ---- Contacto con la piel ----
+  // Con movimiento el IR puede bajar un instante: recién se da por perdido
+  // el contacto si pasa ~0,5 s seguido.
+  static int muestrasSinPiel = 0;
   if (ir < IR_CONTACTO_MIN) {
+    if (++muestrasSinPiel < SIN_CONTACTO_MUESTRAS && hayContacto) return;
     if (hayContacto) { LOG("Sensor sin contacto con la piel\n"); reiniciarSenal(); }
     hayContacto = false;
     return;
   }
+  muestrasSinPiel = 0;
   if (!hayContacto) {
     hayContacto = true;
     contactoDesde = millis();
@@ -427,13 +671,26 @@ void procesarMuestra(uint32_t rojo, uint32_t ir) {
   }
   muestrasSaturadas = 0;
 
-  float acIR = canalIR.procesar(ir);
+  canalIR.procesar(ir);
   canalRojo.procesar(rojo);
-  if (millis() - contactoDesde < ESTABILIZAR_MS) return;   // todavía asentándose
 
-  // En la muñeca, más sangre = MENOS luz reflejada: se invierte la señal
-  // para que cada latido sea un pico hacia arriba.
-  float s = -acIR;
+  // Señal del pulso (invertida: en la muñeca más sangre = MENOS luz) y
+  // movimiento, los dos filtrados igual, y el movimiento restado.
+  float pulso = bpPulso.paso(-((float)ir - canalIR.dc));
+  float ax = bpAx.paso(accX), ay = bpAy.paso(accY), az = bpAz.paso(accZ);
+  float s = cancelarMovimiento(pulso, ax, ay, az);
+
+  // Historial a 25 muestras/s (promedio de a 2) para el análisis por frecuencia
+  accumP += s; accumA[0] += ax; accumA[1] += ay; accumA[2] += az;
+  if (++accumN >= (int)(FS_NOMINAL / ESPECTRO_FS)) {
+    histPulso[histIdx] = accumP / accumN;
+    for (int e = 0; e < 3; e++) { histAcc[e][histIdx] = accumA[e] / accumN; accumA[e] = 0; }
+    histIdx = (histIdx + 1) % ESPECTRO_N;
+    if (histLlenas < ESPECTRO_N) histLlenas++;
+    accumP = 0; accumN = 0;
+  }
+
+  if (millis() - contactoDesde < ESTABILIZAR_MS) return;   // todavía asentándose
 
   // Umbral adaptable: 40% de la amplitud típica (que baja de a poco)
   envolvente *= 0.995f;
@@ -503,6 +760,8 @@ void setup() {
 
   canalIR.filtro.pasaBajos(4.0f, FS_NOMINAL);
   canalRojo.filtro.pasaBajos(4.0f, FS_NOMINAL);
+  bpPulso.configurar(FS_NOMINAL);
+  bpAx.configurar(FS_NOMINAL); bpAy.configurar(FS_NOMINAL); bpAz.configurar(FS_NOMINAL);
 
 #if USAR_MPU
   iniciarMPU();
@@ -519,10 +778,17 @@ void loop() {
 
   uint32_t ahora = millis();
 
-  // Si hace rato que no hay un latido bueno, se borra el valor viejo
-  if (ultimoBpm && ahora - ultimoLatidoBueno > SIN_LATIDO_MS) {
-    LOG("Hace %d s que no hay un latido limpio: se borra la lectura\n", SIN_LATIDO_MS / 1000);
-    borrarLatidos();
+  // Si hace rato que no hay un latido limpio, se reinicia el detector
+  // latido a latido (el pulso sigue por frecuencia mientras tanto)
+  if (bpmLatidos && ahora - ultimoLatidoBueno > SIN_LATIDO_MS) borrarLatidos();
+
+  // Una vez por segundo: análisis por frecuencia y qué valor mostrar
+  static uint32_t ultimoAnalisis = 0;
+  if (hayContacto && ahora - ultimoAnalisis >= 1000) {
+    ultimoAnalisis = ahora;
+    bool moviendose = (ahora - ultimoMovimiento < 2000);
+    analizarFrecuencias(moviendose);
+    actualizarSalida(moviendose);
   }
 
   // Temperatura (bloquea ~30 ms, por eso se lee poco)
@@ -537,9 +803,9 @@ void loop() {
   if (ahora - ultimoLog >= 1000) {
     ultimoLog = ahora;
     float pi = canalIR.dc > 0 ? 100.0f * envolvente / canalIR.dc : 0;
-    LOG("IR:%lu  LED:%d  fs:%.1f  señal:%.3f%%  latidos:%d  %s  BPM:%d  SpO2:%d\n",
-        (unsigned long)canalIR.dc, brilloLed, fsReal, pi, nLatidos,
-        (ahora - ultimoMovimiento < MOVIMIENTO_PAUSA_MS) ? "MOVIMIENTO" : "quieto",
+    LOG("IR:%lu  LED:%d  fs:%.1f  señal:%.3f%%  latidos:%d  frec:%.0f(conf %.1f)  %s  BPM:%d  SpO2:%d\n",
+        (unsigned long)canalIR.dc, brilloLed, fsReal, pi, nLatidos, bpmSeguido, confianzaEspectro,
+        (ahora - ultimoMovimiento < 2000) ? "MOVIMIENTO" : "quieto",
         ultimoBpm, ultimoSpo2);
   #if USAR_MPU && USAR_GIROSCOPIO
     float gx, gy, gz;
