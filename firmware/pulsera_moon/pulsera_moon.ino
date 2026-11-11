@@ -71,6 +71,13 @@
 #define MOVIMIENTO_G 0.12f
 #define MOVIMIENTO_PAUSA_MS 1000
 
+// ---- MODO DEMO (para presentaciones) ----
+// 1 = manda valores normales simulados (pulso ~70-80, SpO2 97-99%) aunque
+//     el sensor no esté midiendo. La detección de caídas sigue siendo real.
+//     El monitor serie y la página muestran "DEMO".
+// 0 = medición real del sensor.
+#define MODO_DEMO 0
+
 #define USAR_MPU 1
 // 1 = giroscopio prendido (se lee y se imprime en el diagnóstico).
 // 0 = giroscopio apagado: ahorra ~3,5 mA. Hoy la web solo usa la
@@ -129,6 +136,9 @@ void enviarVitalesBLE(int spo2Val, int bpmVal, float tempVal, float gVal) {
   int len = (spo2Val > 0 && bpmVal > 0)
     ? snprintf(msg, sizeof(msg), "%d,%d,%.1f,%.2f", spo2Val, bpmVal, tempVal, gVal)
     : snprintf(msg, sizeof(msg), "nan,nan,%.1f,%.2f", tempVal, gVal);
+#if MODO_DEMO
+  len += snprintf(msg + len, sizeof(msg) - len, ",demo");   // la web muestra "MODO DEMO"
+#endif
   pVitalsChar->setValue((uint8_t *)msg, len);
   pVitalsChar->notify();
 }
@@ -211,12 +221,35 @@ void actualizarG() {
 void actualizarG() {}
 #endif
 
+#if MODO_DEMO
+// Valores normales que cambian despacio, como un pulso de verdad en reposo:
+// una onda lenta (respiración) + un poco de variación al azar.
+void valoresDemo(int &bpm, int &spo2) {
+  static float bpmDemo = 75, spo2Demo = 98;
+  float t = millis() / 1000.0f;
+  float objetivoBpm = 75.0f + 4.0f * sinf(t * 0.21f) + 1.5f * sinf(t * 0.73f);
+  bpmDemo += (objetivoBpm - bpmDemo) * 0.3f + (random(-10, 11) / 20.0f);
+  float objetivoSpo2 = 98.0f + 0.8f * sinf(t * 0.05f);
+  spo2Demo += (objetivoSpo2 - spo2Demo) * 0.2f + (random(-10, 11) / 40.0f);
+  if (spo2Demo > 99.4f) spo2Demo = 99.4f;
+  if (spo2Demo < 96.6f) spo2Demo = 96.6f;
+  bpm = (int)lroundf(bpmDemo);
+  spo2 = (int)lroundf(spo2Demo);
+}
+#endif
+
 void enviarPeriodico() {
   static uint32_t ultimoEnvio = 0;
   uint32_t ahora = millis();
   if (ahora - ultimoEnvio < BLE_INTERVALO_MS) return;
   ultimoEnvio = ahora;
+#if MODO_DEMO
+  int bpm, spo2;
+  valoresDemo(bpm, spo2);
+  enviarVitalesBLE(spo2, bpm, ultimaTemp, gReportado);
+#else
   enviarVitalesBLE(ultimoSpo2, ultimoBpm, ultimaTemp, gReportado);
+#endif
   gReportado = 1.0f;
 }
 
@@ -486,6 +519,9 @@ void setup() {
   while (!Serial && millis() - t < 2000) delay(10);
 #endif
   LOG("Arrancando...\n");
+#if MODO_DEMO
+  LOG("*** MODO DEMO: se mandan valores simulados ***\n");
+#endif
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setTimeOut(50);
@@ -536,6 +572,9 @@ void loop() {
   static uint32_t ultimoLog = 0;
   if (ahora - ultimoLog >= 1000) {
     ultimoLog = ahora;
+  #if MODO_DEMO
+    { int b, o; valoresDemo(b, o); LOG("[DEMO] BPM:%d  SpO2:%d  (sensor real abajo)\n", b, o); }
+  #endif
     float pi = canalIR.dc > 0 ? 100.0f * envolvente / canalIR.dc : 0;
     LOG("IR:%lu  LED:%d  fs:%.1f  señal:%.3f%%  latidos:%d  %s  BPM:%d  SpO2:%d\n",
         (unsigned long)canalIR.dc, brilloLed, fsReal, pi, nLatidos,

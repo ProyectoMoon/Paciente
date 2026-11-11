@@ -1483,6 +1483,10 @@
           ptLastGood = { spo2: spo2, bpm: bpm };
           ptStale = false;
           ptSetLiveVitals(spo2, bpm, temp);
+          // La pulsera avisa si está en modo demo (5º dato = "demo")
+          if ((partes[4] || '').trim() === 'demo') {
+            document.getElementById('pt-live-text').textContent = 'Pulsera MOON conectada — MODO DEMO (valores simulados)';
+          }
         } else if (Date.now() - ptLastRealVitalsTs > PT_ESTIMATE_AFTER_MS) {
           // Pulsera conectada pero sin lectura válida todavía (dedo mal apoyado,
           // sensor estabilizando): se muestra un valor ESTIMADO, marcado como tal.
