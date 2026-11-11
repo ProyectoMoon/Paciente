@@ -516,6 +516,223 @@
     .pt-fall-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 0.9rem; font-size: 0.78rem; color: var(--text-muted); }
     .pt-fall-controls select { background: var(--color-background-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 0.78rem; }
     .pt-fall-dismiss { display: none; background: var(--danger); color: #fff; border: none; font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 600; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+
+    /* ==========================================================================
+       REDISEÑO (estilo más profesional)
+       Todo lo de acá abajo solo cambia el aspecto: no cambia textos ni lógica.
+       ========================================================================== */
+    :root {
+      --night: #070b14;
+      --card: #111a2e;
+      --card-2: #0d1526;
+      --border: #1f2b47;
+      --accent: #5b8def;
+      --accent-2: #7aa7ff;
+      --ok: #3fbf7f;      --ok-soft: rgba(63,191,127,0.12);
+      --warn: #f2a93b;    --warn-soft: rgba(242,169,59,0.12);
+      --crit: #ef5350;    --crit-soft: rgba(239,83,80,0.13);
+      --color-background-primary: #111a2e;
+      --color-background-secondary: #0d1526;
+      --color-border-tertiary: #1f2b47;
+      --color-border-secondary: #2a3a5e;
+      --border-radius-lg: 16px;
+      --border-radius-md: 12px;
+      --shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -12px rgba(0,0,0,0.6);
+    }
+    body {
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(91,141,239,0.10), transparent 60%),
+        var(--night);
+      -webkit-font-smoothing: antialiased;
+    }
+    .page-wrap::before { display: none; }
+
+    /* Barra superior */
+    nav { height: 64px; background: rgba(7,11,20,0.78); border-bottom-color: rgba(255,255,255,0.06); }
+    .nav-logo { color: #c9d6ec; font-size: 1.15rem; letter-spacing: 0.28em; }
+    .nav-user { color: var(--text-muted); }
+    .nav-logout { border-radius: 999px; padding: 7px 16px; }
+
+    /* Ancho: formularios angostos, panel más ancho en compu */
+    .page-wrap { padding: 112px 20px 72px; }
+    body.is-panel .page-wrap { max-width: 1080px; }
+    body.is-panel .pt-footer { max-width: 1080px; }
+    .pt-footer { padding-left: 20px; padding-right: 20px; }
+
+    /* Títulos */
+    .section-label { color: var(--accent-2); letter-spacing: 0.18em; }
+    .section-title { font-weight: 700; letter-spacing: -0.01em; }
+    .pm-vitals-title, .pm-diag-title {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px; letter-spacing: 0.16em; color: var(--text-muted);
+      margin: 0 0 0.9rem;
+    }
+    .pm-vitals-title::after, .pm-diag-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* Tarjetas en general */
+    .pt-card, .pm-patient, .pt-ble-card, .pt-fall-card, .pm-vital {
+      background: linear-gradient(180deg, var(--card), var(--card-2));
+      border: 1px solid var(--border);
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow);
+    }
+    .pt-card { padding: 2rem; }
+
+    /* Formularios */
+    .pt-field label { color: #a9b6cc; font-size: 0.8rem; }
+    .pt-field input, .pt-field select {
+      background: #0a1120; border-color: var(--border); border-radius: 10px; padding: 13px 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .pt-field input:focus, .pt-field select:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,141,239,0.18);
+    }
+    .pt-btn {
+      background: linear-gradient(180deg, #4f7fe0, #3a63c4);
+      border-radius: 10px; padding: 14px;
+      box-shadow: 0 8px 20px -8px rgba(79,127,224,0.65);
+    }
+    .pt-btn:hover { background: linear-gradient(180deg, #5b8def, #4570d4); }
+    .pt-btn:focus-visible, .pt-ghost-btn:focus-visible, .pt-ble-action:focus-visible, .nav-logout:focus-visible {
+      outline: 2px solid var(--accent-2); outline-offset: 2px;
+    }
+    .pt-ghost-btn { border-radius: 999px; padding: 8px 16px; background: rgba(255,255,255,0.02); }
+    .pm-disease-pill { padding: 7px 16px; margin: 0 6px 8px 0; }
+    .pm-disease-pill.active { background: rgba(91,141,239,0.15); color: #cfe0ff; border-color: var(--accent); }
+
+    /* Encabezado del panel */
+    .pt-panel-top { margin-bottom: 1.25rem; }
+    .pt-hello { font-size: 0.82rem; }
+
+    /* Fila superior: Bluetooth + paciente */
+    .pt-top-grid { display: grid; gap: 16px; margin-bottom: 1.25rem; }
+    .pt-top-grid > .pt-ble-card, .pt-top-grid > .pm-patient { margin-bottom: 0; }
+    .pt-ble-card { padding: 1.1rem 1.25rem; }
+    .pt-ble-icon-wrap, .pt-fall-icon {
+      width: 46px; height: 46px; border-radius: 14px;
+      background: rgba(91,141,239,0.10); border: 1px solid rgba(91,141,239,0.25); color: var(--accent-2);
+    }
+    .pt-ble-card.is-connected { border-color: rgba(63,191,127,0.55); }
+    .pt-ble-card.is-connected .pt-ble-icon-wrap { background: var(--ok-soft); border-color: rgba(63,191,127,0.45); color: var(--ok); }
+    .pt-ble-card.is-error { border-color: rgba(239,83,80,0.55); }
+    .pt-ble-name { font-size: 14.5px; font-weight: 600; }
+    .pt-ble-action { padding: 9px 18px; background: rgba(91,141,239,0.12); border-color: rgba(91,141,239,0.4); color: #cfe0ff; }
+    .pt-ble-action:hover { background: rgba(91,141,239,0.22); color: #fff; }
+
+    .pm-patient { padding: 1.1rem 1.25rem; gap: 14px; }
+    .pm-avatar {
+      width: 54px; height: 54px; border-radius: 16px;
+      background: linear-gradient(135deg, #3a63c4, #6a4fd0); border: none; color: #fff;
+      font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700;
+    }
+    .pm-patient-name { font-size: 17px; font-weight: 600; }
+    .pm-badge { font-size: 11.5px; padding: 4px 11px; }
+
+    /* Fila "en vivo" */
+    .pm-live-row {
+      display: inline-flex; padding: 7px 14px; border-radius: 999px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      color: var(--text-muted); margin-bottom: 1.4rem;
+    }
+
+    /* Signos vitales: números grandes, color según el estado */
+    .pm-vitals { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 1.75rem; }
+    .pm-vital {
+      padding: 1.25rem 1.35rem 1.2rem;
+      display: grid; grid-template-columns: 1fr auto; grid-template-areas:
+        "name icon" "val icon" "bar bar" "status status";
+      align-items: start;
+    }
+    .pm-vital::before {
+      content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+      background: var(--border); transition: background 0.3s;
+    }
+    .pm-vital.ok::before { background: var(--ok); }
+    .pm-vital.warning::before { background: var(--warn); }
+    .pm-vital.danger::before { background: var(--crit); }
+    .pm-vital.ok { border-color: rgba(63,191,127,0.35); }
+    .pm-vital.warning { border-color: rgba(242,169,59,0.45); }
+    .pm-vital.danger { border-color: rgba(239,83,80,0.6); box-shadow: 0 0 0 1px rgba(239,83,80,0.25), 0 12px 32px -12px rgba(239,83,80,0.45); }
+    .pm-vital-name { grid-area: name; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+    .pm-vital > div:nth-of-type(3) { grid-area: val; }
+    .pm-vital-icon {
+      grid-area: icon; width: 44px; height: 44px; border-radius: 14px; margin: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+      background: rgba(255,255,255,0.04); color: var(--text-muted);
+    }
+    .pm-vital-icon.ok { background: var(--ok-soft); color: var(--ok); }
+    .pm-vital-icon.warning { background: var(--warn-soft); color: var(--warn); }
+    .pm-vital-icon.danger { background: var(--crit-soft); color: var(--crit); }
+    .pm-vital-val {
+      font-family: 'Space Grotesk', sans-serif; font-size: 46px; font-weight: 600;
+      letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    }
+    .pm-vital-unit { font-size: 14px; margin-left: 2px; }
+    .pm-bar { grid-area: bar; height: 6px; border-radius: 999px; margin-top: 14px; background: rgba(255,255,255,0.06); }
+    .pm-bar-fill { height: 6px; border-radius: 999px; min-width: 6px; }
+    .pm-vital-status { grid-area: status; justify-self: start; margin-top: 12px; font-size: 11.5px; letter-spacing: 0.03em; padding: 4px 11px; }
+    .status-ok { background: var(--ok-soft); color: #7fe0ae; border-color: rgba(63,191,127,0.35); }
+    .status-warning { background: var(--warn-soft); color: #f7c77a; border-color: rgba(242,169,59,0.4); }
+    .status-danger { background: var(--crit-soft); color: #ff9a98; border-color: rgba(239,83,80,0.45); }
+
+    /* Caídas y diagnóstico */
+    .pt-bottom-grid { display: grid; gap: 1.75rem; }
+    .pt-fall-card { padding: 1.15rem 1.25rem; margin-bottom: 0; }
+    .pt-fall-card.is-active { border-color: rgba(63,191,127,0.45); }
+    .pt-fall-card.is-active .pt-fall-icon { background: var(--ok-soft); border-color: rgba(63,191,127,0.45); color: var(--ok); }
+    .pt-fall-card.is-alert .pt-fall-icon { background: var(--crit-soft); border-color: rgba(239,83,80,0.5); color: var(--crit); }
+    .pt-fall-title { font-size: 15px; font-weight: 600; }
+    .pt-fall-metrics {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 1rem;
+    }
+    .pt-fall-metrics > div {
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; padding: 9px 12px;
+    }
+    .pt-fall-metrics b { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .pt-fall-dismiss { border-radius: 999px; padding: 9px 18px; }
+
+    .pm-diags { gap: 10px; }
+    .pm-diag {
+      background: linear-gradient(180deg, var(--card), var(--card-2));
+      border: 1px solid var(--border); border-left-width: 3px;
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .pm-diag.diag-ok { border-left-color: var(--ok); }
+    .pm-diag.diag-warning { border-left-color: var(--warn); }
+    .pm-diag.diag-danger { border-left-color: var(--crit); background: linear-gradient(180deg, rgba(239,83,80,0.08), var(--card-2)); }
+    .pm-diag-icon.ok { color: var(--ok); }
+    .pm-diag-icon.warning { color: var(--warn); }
+    .pm-diag-icon.danger { color: var(--crit); }
+    .pm-diag-head { font-weight: 600; }
+    #pt-otrasBox { border-radius: 12px !important; border: 1px solid var(--border) !important; }
+
+    /* Cartel de alarma */
+    #pt-alarm-banner { border-radius: 12px; padding: 12px 20px; box-shadow: 0 12px 34px rgba(239,83,80,0.5); }
+
+    /* Pie */
+    .pt-footer { border-top-color: rgba(255,255,255,0.06); }
+    .pt-footer-logo { color: #c9d6ec; }
+
+    /* Compu: dos columnas en el panel */
+    @media (min-width: 900px) {
+      .pt-top-grid { grid-template-columns: 1fr 1.35fr; align-items: stretch; }
+      .pt-bottom-grid { grid-template-columns: 1fr 1.35fr; align-items: start; }
+    }
+    /* Celular */
+    @media (max-width: 640px) {
+      .page-wrap { padding: 96px 16px 56px; }
+      .pt-card { padding: 1.4rem; }
+      .pm-vitals { grid-template-columns: 1fr 1fr; gap: 12px; }
+      .pm-vital { padding: 1rem 1rem 1rem; grid-template-areas: "name name" "val val" "bar bar" "status status"; grid-template-columns: 1fr; }
+      .pm-vital-icon { display: none; }
+      .pm-vital-val { font-size: 38px; }
+      .pm-vital-name { font-size: 12px; min-height: 2.6em; }
+    }
+    @media (max-width: 360px) {
+      .pm-vitals { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -664,6 +881,8 @@
         <button class="pt-ghost-btn" onclick="ptEditProfile()"><i class="ti ti-edit"></i> Editar perfil</button>
       </div>
 
+      <div class="pm-root">
+      <div class="pt-top-grid">
       <!-- Tarjeta de conexión Bluetooth con la pulsera ESP32-C3 -->
       <div class="pt-ble-card" id="pt-ble-card">
         <div class="pt-ble-icon-wrap" id="pt-ble-icon-wrap">
@@ -684,7 +903,6 @@
         <div class="pt-ble-help" id="pt-ble-help"></div>
       </div>
 
-      <div class="pm-root">
         <div class="pm-patient">
           <div class="pm-avatar" id="pt-avatar">--</div>
           <div class="pm-patient-info">
@@ -696,6 +914,7 @@
             <div class="pm-badges" id="pt-disease-badges"></div>
           </div>
         </div>
+      </div>
 
         <div class="pm-live-row">
           <span class="pm-live-dot" id="pt-live-dot"></span>
@@ -720,6 +939,8 @@
           </div>
         </div>
 
+        <div class="pt-bottom-grid">
+        <div class="pt-col">
         <div class="pm-vitals-title">Detección de caídas</div>
         <div class="pt-fall-card" id="pt-fall-card">
           <div class="pt-fall-head">
@@ -739,12 +960,16 @@
           <div class="pt-fall-sub" id="pt-mail-status" style="display:none;margin-top:0.8rem;"></div>
         </div>
 
+        </div>
+        <div class="pt-col">
         <div class="pm-diag-title">Diagnóstico automático</div>
         <div class="pm-diags" id="pt-diags"></div>
 
         <div id="pt-otrasBox" style="display:none; margin-top:1.5rem; background:var(--color-background-secondary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:14px 16px;">
           <div style="font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Otras condiciones relevantes</div>
           <div style="font-size:13px; color:var(--color-text-secondary);" id="pt-otrasText"></div>
+        </div>
+        </div>
         </div>
       </div>
     </div>
@@ -853,6 +1078,7 @@
         document.getElementById(id).style.display = (id === view) ? 'block' : 'none';
       });
       document.getElementById('navLogoutWrap').style.display = (view === 'pt-panelView') ? 'block' : 'none';
+      document.body.classList.toggle('is-panel', view === 'pt-panelView');
       const ecgBg = document.querySelector('.pt-ecg-bg');
       if (ecgBg) ecgBg.style.display = (view === 'pt-panelView') ? 'none' : 'block';
       if (view !== 'pt-panelView') {
