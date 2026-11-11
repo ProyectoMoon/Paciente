@@ -543,7 +543,7 @@
       --color-border-secondary: #2e3a58;
       --border-radius-lg: 16px;
       --border-radius-md: 12px;
-      --shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -12px rgba(0,0,0,0.6);
+      --shadow: 0 10px 30px -12px rgba(0,0,0,0.6);
     }
     body {
       background:
@@ -739,6 +739,12 @@
     @media (max-width: 360px) {
       .pm-vitals { grid-template-columns: 1fr; }
     }
+
+    /* Sin barra de progreso ni franja de color arriba en las tarjetas de signos vitales
+       (el estado se ve en el borde, el ícono y la etiqueta Normal/Irregular/Crítico) */
+    .pm-bar { display: none; }
+    .pm-vital::before { content: none; }
+    .pm-vital-status:empty { display: none; }
   </style>
 </head>
 <body>
