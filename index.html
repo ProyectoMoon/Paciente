@@ -2071,8 +2071,8 @@
     // que EmailJS lo rechace con "422 The recipients address is corrupted".
     function ptLimpiarEmail(e) {
       return String(e || '')
-        .replace(/[\s\u200B-\u200D\u2060\uFEFF\u00A0]/g, '')
-        .replace(/[\uFF20\uFE6B]/g, '@')
+        .replace(/[\s​-‍⁠﻿ ]/g, '')
+        .replace(/[＠﹫]/g, '@')
         .toLowerCase();
     }
     function ptEmailValido(e) {
@@ -2206,7 +2206,7 @@
         params: ptEmailBase({
           caida: 'Sí',
           titulo: 'Alerta MOON — caída detectada',
-          mensaje: 'Se detectó una posible CAÍDA de ' + nombre + ' (caída libre seguida de un impacto fuerte). Comuníquese con el paciente.'
+          mensaje: 'Se detectó una posible CAÍDA de ' + nombre + ' (impacto fuerte en la pulsera). Comuníquese con el paciente.'
         }),
         onFail: () => { ptLastFallEmailTs = 0; }
       }, true);
@@ -2283,32 +2283,15 @@
 
     // ==========================================================================
     // DETECCIÓN DE CAÍDAS (acelerómetro MPU6050)
-    // Una caída real tiene dos partes seguidas:
-    //   1) CAÍDA LIBRE: por un instante el cuerpo "pesa" menos y la aceleración
-    //      total baja mucho (menos de 0,6 g).
-    //   2) IMPACTO: enseguida, un golpe fuerte (3 g o más).
-    // Se exige que pasen LAS DOS cosas (la caída libre como mucho 1,5 s antes
-    // del impacto). Un gesto brusco, golpear la mesa o sacudir la mano dan
-    // golpes, pero no caída libre, así que ya no cuentan como caída.
-    // En cuanto se detectan las dos, se da la alarma y se manda el mail al
-    // instante (no se espera a ver si la persona se mueve).
-    //
-    // La pulsera manda: "spo2,bpm,temp,gMax,gMin" (máximo y mínimo del último
-    // medio segundo). Si una pulsera vieja manda solo 4 datos (sin gMin), no
-    // se puede ver la caída libre y se usa solo un impacto muy fuerte
-    // (FALL_IMPACT_G_SOLO).
-    //
-    // Para hacerlo MENOS sensible: subí FALL_IMPACT_G (ej. 3.5) o bajá
-    // FALL_FREEFALL_G (ej. 0.5). Para hacerlo MÁS sensible, al revés.
+    // Regla simple: si la aceleración supera FALL_IMPACT_G (4,5 g), se toma
+    // como caída y se da la alarma y el mail al instante.
+    // Para hacerlo MENOS sensible subí FALL_IMPACT_G (ej. 5); para MÁS, bajalo.
+    // La pulsera manda "spo2,bpm,temp,gMax,gMin": se usa gMax (el 4° dato).
     // ==========================================================================
-    const FALL_IMPACT_G        = 3.0;   // impacto mínimo (en g)
-    const FALL_FREEFALL_G      = 0.6;   // por debajo de esto = caída libre
-    const FALL_FREEFALL_MS     = 1500;  // la caída libre tiene que ser como mucho 1,5 s antes del impacto
-    const FALL_IMPACT_G_SOLO   = 4.5;   // si la pulsera no manda gMin: impacto necesario sin caída libre
-    const FALL_REARM_MS        = 5000;  // después de "Estoy bien", se ignoran movimientos por 5 s
+    const FALL_IMPACT_G   = 4.5;   // a partir de esta aceleración (en g) = caída
+    const FALL_REARM_MS   = 5000;  // después de "Estoy bien", se ignoran movimientos por 5 s
 
     let fallState = 'idle'; // 'idle' | 'alert'
-    let fallUltimaCaidaLibreTs = 0;
     let fallIgnorarHasta = 0;
 
     function ptFallUI(mode, title, sub) {
@@ -2333,33 +2316,20 @@
     function ptProcessG(gMax, gMin) {
       document.getElementById('pt-fall-g').textContent = gMax.toFixed(2);
       if (fallState === 'alert') return;
-      const ahora = Date.now();
-      if (ahora < fallIgnorarHasta) return;
+      if (Date.now() < fallIgnorarHasta) return;
       ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
-
-      // 1) ¿Hubo caída libre? (se guarda cuándo, para compararla con el impacto)
-      if (gMin !== null && gMin < FALL_FREEFALL_G) fallUltimaCaidaLibreTs = ahora;
-
-      // 2) ¿Hubo impacto fuerte justo después de una caída libre?
-      let esCaida;
-      if (gMin === null) {
-        esCaida = gMax >= FALL_IMPACT_G_SOLO;   // pulsera vieja: solo un golpe muy fuerte
-      } else {
-        esCaida = gMax >= FALL_IMPACT_G && (ahora - fallUltimaCaidaLibreTs) <= FALL_FREEFALL_MS;
-      }
-      if (esCaida) {
-        console.log('MOON caída: gMax =', gMax, 'gMin =', gMin);
+      if (gMax >= FALL_IMPACT_G) {
+        console.log('MOON caída: gMax =', gMax);
         ptTriggerFall();
       }
     }
 
     function ptTriggerFall() {
       fallState = 'alert';
-      fallUltimaCaidaLibreTs = 0;
       ptAlarmState.caida = 'danger';
       const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
       document.getElementById('pt-fall-last').textContent = 'Hoy ' + hora;
-      ptFallUI('alert', '¡Caída detectada!', 'Caída libre seguida de un impacto fuerte');
+      ptFallUI('alert', '¡Caída detectada!', 'Se detectó un impacto fuerte');
       const profile = ptGetMyProfile();
       if (profile) { profile.lastFall = new Date().toISOString(); ptSaveMyProfile(profile); }
       // Una caída nueva siempre es un evento nuevo: se salta el tiempo de espera
@@ -2371,7 +2341,6 @@
 
     function ptDismissFall() {
       fallState = 'idle';
-      fallUltimaCaidaLibreTs = 0;
       fallIgnorarHasta = Date.now() + FALL_REARM_MS;  // que no salte de nuevo al levantarse
       ptAlarmState.caida = 'ok';
       ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
