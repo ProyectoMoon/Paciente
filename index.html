@@ -1506,8 +1506,10 @@
        o de característica, cambialos acá para que coincidan exactamente.
 
        Del lado del ESP32-C3, la característica de VITALES tiene que mandar
-       por "notify" un texto simple con el formato:  spo2,bpm,temp,g
-       Ejemplo:  pVitalsChar->setValue("97,78,36.6,1.02"); pVitalsChar->notify();
+       por "notify" un texto simple con el formato:  spo2,bpm,temp,gMax,gMin
+       Ejemplo:  "97,78,36.6,1.02,0.98"
+       (gMax y gMin = aceleración máxima y mínima del último medio segundo.
+       Si la pulsera manda solo 4 datos, gMin no se usa; ver detección de caídas.)
 
        -------------------------------------------------------------------
        POR QUÉ SE MUESTRAN TODOS LOS DISPOSITIVOS (no solo los que anuncian
@@ -1870,7 +1872,7 @@
 
     function ptHandleBluetoothData(event) {
       const text = new TextDecoder().decode(event.target.value);
-      // Formato: "spo2,bpm,temp" o "spo2,bpm,temp,g"
+      // Formato: "spo2,bpm,temp,gMax,gMin" (también acepta "spo2,bpm,temp,g")
       console.log('MOON BLE recibido:', text);
       document.getElementById('pt-ble-status').textContent = 'Conectada — recibiendo datos';
       const partes = text.trim().split(',');
@@ -1892,11 +1894,13 @@
         }
       }
 
-      // Aceleración (g): se procesa SIEMPRE que llegue, aunque spo2/bpm/temp
+      // Aceleración: se procesa SIEMPRE que llegue, aunque spo2/bpm/temp
       // vengan en "nan" o vacíos (el sensor de SpO2 a veces no tiene lectura).
+      // 4° dato = g máximo del último medio segundo; 5° dato (opcional) = g mínimo.
       if (partes.length >= 4) {
-        const g = parseFloat(partes[3]);
-        if (!isNaN(g)) ptProcessG(g);
+        const gMax = parseFloat(partes[3]);
+        const gMin = partes.length >= 5 ? parseFloat(partes[4]) : NaN;
+        if (!isNaN(gMax)) ptProcessG(gMax, isNaN(gMin) ? null : gMin);
       }
     }
 
@@ -2202,7 +2206,7 @@
         params: ptEmailBase({
           caida: 'Sí',
           titulo: 'Alerta MOON — caída detectada',
-          mensaje: 'El paciente ' + nombre + ' sufrió una CAÍDA y no se movió después del impacto.'
+          mensaje: 'Se detectó una posible CAÍDA de ' + nombre + ' (caída libre seguida de un impacto fuerte). Comuníquese con el paciente.'
         }),
         onFail: () => { ptLastFallEmailTs = 0; }
       }, true);
@@ -2279,27 +2283,33 @@
 
     // ==========================================================================
     // DETECCIÓN DE CAÍDAS (acelerómetro MPU6050)
-    // Algoritmo: IMPACTO (g alto) -> espera 1s -> quietud (g ~ 1) = CAÍDA.
-    // Si después del impacto hay movimiento, se descarta.
-    // La pulsera manda la aceleración total en g como 4° dato: "spo2,bpm,temp,g"
+    // Una caída real tiene dos partes seguidas:
+    //   1) CAÍDA LIBRE: por un instante el cuerpo "pesa" menos y la aceleración
+    //      total baja mucho (menos de 0,6 g).
+    //   2) IMPACTO: enseguida, un golpe fuerte (3 g o más).
+    // Se exige que pasen LAS DOS cosas (la caída libre como mucho 1,5 s antes
+    // del impacto). Un gesto brusco, golpear la mesa o sacudir la mano dan
+    // golpes, pero no caída libre, así que ya no cuentan como caída.
+    // En cuanto se detectan las dos, se da la alarma y se manda el mail al
+    // instante (no se espera a ver si la persona se mueve).
     //
-    // AJUSTES (versión corregida):
-    // - Tolerancia de quietud más amplia (0.5 g) para absorber el ruido del MPU6050.
-    // - Alcanza con 1 muestra posterior al impacto (la pulsera puede mandar lento).
-    // - Se confirma la caída si al menos el 80% de las muestras están quietas
-    //   (antes tenían que estar TODAS quietas).
-    // - Si se descarta, la pantalla dice por qué (pocos datos / movimiento).
+    // La pulsera manda: "spo2,bpm,temp,gMax,gMin" (máximo y mínimo del último
+    // medio segundo). Si una pulsera vieja manda solo 4 datos (sin gMin), no
+    // se puede ver la caída libre y se usa solo un impacto muy fuerte
+    // (FALL_IMPACT_G_SOLO).
+    //
+    // Para hacerlo MENOS sensible: subí FALL_IMPACT_G (ej. 3.5) o bajá
+    // FALL_FREEFALL_G (ej. 0.5). Para hacerlo MÁS sensible, al revés.
     // ==========================================================================
-    const FALL_IMPACT_G     = 2.5;   // umbral fijo: impacto típico de una caída real
-    const FALL_WAIT_MS      = 1000;  // se ignoran las muestras del primer segundo (rebote del impacto)
-    const FALL_STILL_MS     = 4000;  // a los 4 s después del impacto se decide
-    const FALL_STILL_TOL    = 0.5;   // |g - 1| menor a esto = quieto
-    const FALL_MIN_SAMPLES  = 1;     // mínimo de muestras para poder decidir
-    const FALL_STILL_RATIO  = 0.8;   // fracción de muestras quietas necesaria
+    const FALL_IMPACT_G        = 3.0;   // impacto mínimo (en g)
+    const FALL_FREEFALL_G      = 0.6;   // por debajo de esto = caída libre
+    const FALL_FREEFALL_MS     = 1500;  // la caída libre tiene que ser como mucho 1,5 s antes del impacto
+    const FALL_IMPACT_G_SOLO   = 4.5;   // si la pulsera no manda gMin: impacto necesario sin caída libre
+    const FALL_REARM_MS        = 5000;  // después de "Estoy bien", se ignoran movimientos por 5 s
 
-    let fallState = 'idle'; // 'idle' | 'impact' | 'alert'
-    let fallSamples = [];
-    let fallImpactTs = 0;
+    let fallState = 'idle'; // 'idle' | 'alert'
+    let fallUltimaCaidaLibreTs = 0;
+    let fallIgnorarHasta = 0;
 
     function ptFallUI(mode, title, sub) {
       const card = document.getElementById('pt-fall-card');
@@ -2320,50 +2330,36 @@
       document.getElementById('pt-fall-sub').textContent = sub;
     }
 
-
-    function ptProcessG(g) {
-      document.getElementById('pt-fall-g').textContent = g.toFixed(2);
+    function ptProcessG(gMax, gMin) {
+      document.getElementById('pt-fall-g').textContent = gMax.toFixed(2);
       if (fallState === 'alert') return;
-      if (fallState === 'idle') {
-        ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
-        if (g >= FALL_IMPACT_G) {
-          fallState = 'impact';
-          fallImpactTs = Date.now();
-          fallSamples = [];
-          ptFallUI('active', 'Impacto detectado', 'Verificando si la persona se levanta...');
-          setTimeout(ptEvaluateFall, FALL_STILL_MS);
-        }
-      } else if (fallState === 'impact') {
-        if (Date.now() - fallImpactTs > FALL_WAIT_MS) fallSamples.push(g);
-      }
-    }
+      const ahora = Date.now();
+      if (ahora < fallIgnorarHasta) return;
+      ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
 
-    function ptEvaluateFall() {
-      if (fallState !== 'impact') return;
+      // 1) ¿Hubo caída libre? (se guarda cuándo, para compararla con el impacto)
+      if (gMin !== null && gMin < FALL_FREEFALL_G) fallUltimaCaidaLibreTs = ahora;
 
-      console.log('MOON caída: muestras después del impacto =', fallSamples);
-
-      const quietas = fallSamples.filter(g => Math.abs(g - 1) < FALL_STILL_TOL);
-      const quieto = fallSamples.length >= FALL_MIN_SAMPLES &&
-                     (quietas.length / fallSamples.length) >= FALL_STILL_RATIO;
-
-      if (quieto) {
-        ptTriggerFall();
+      // 2) ¿Hubo impacto fuerte justo después de una caída libre?
+      let esCaida;
+      if (gMin === null) {
+        esCaida = gMax >= FALL_IMPACT_G_SOLO;   // pulsera vieja: solo un golpe muy fuerte
       } else {
-        fallState = 'idle';
-        const motivo = fallSamples.length < FALL_MIN_SAMPLES
-          ? 'Descartado: llegaron muy pocos datos (' + fallSamples.length + ')'
-          : 'Descartado: se detectó movimiento';
-        ptFallUI('active', 'Monitoreando', motivo);
+        esCaida = gMax >= FALL_IMPACT_G && (ahora - fallUltimaCaidaLibreTs) <= FALL_FREEFALL_MS;
+      }
+      if (esCaida) {
+        console.log('MOON caída: gMax =', gMax, 'gMin =', gMin);
+        ptTriggerFall();
       }
     }
 
     function ptTriggerFall() {
       fallState = 'alert';
+      fallUltimaCaidaLibreTs = 0;
       ptAlarmState.caida = 'danger';
       const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
       document.getElementById('pt-fall-last').textContent = 'Hoy ' + hora;
-      ptFallUI('alert', '¡Caída detectada!', 'El paciente no se movió después del impacto');
+      ptFallUI('alert', '¡Caída detectada!', 'Caída libre seguida de un impacto fuerte');
       const profile = ptGetMyProfile();
       if (profile) { profile.lastFall = new Date().toISOString(); ptSaveMyProfile(profile); }
       // Una caída nueva siempre es un evento nuevo: se salta el tiempo de espera
@@ -2375,6 +2371,8 @@
 
     function ptDismissFall() {
       fallState = 'idle';
+      fallUltimaCaidaLibreTs = 0;
+      fallIgnorarHasta = Date.now() + FALL_REARM_MS;  // que no salte de nuevo al levantarse
       ptAlarmState.caida = 'ok';
       ptFallUI('active', 'Monitoreando', 'Acelerómetro activo');
       ptCheckAlarm();
