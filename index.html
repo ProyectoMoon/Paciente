@@ -2283,12 +2283,12 @@
 
     // ==========================================================================
     // DETECCIÓN DE CAÍDAS (acelerómetro MPU6050)
-    // Regla simple: si la aceleración supera FALL_IMPACT_G (4,5 g), se toma
+    // Regla simple: si la aceleración supera FALL_IMPACT_G (6,5 g), se toma
     // como caída y se da la alarma y el mail al instante.
-    // Para hacerlo MENOS sensible subí FALL_IMPACT_G (ej. 5); para MÁS, bajalo.
+    // Para hacerlo MENOS sensible subí FALL_IMPACT_G (ej. 7); para MÁS, bajalo.
     // La pulsera manda "spo2,bpm,temp,gMax,gMin": se usa gMax (el 4° dato).
     // ==========================================================================
-    const FALL_IMPACT_G   = 4.5;   // a partir de esta aceleración (en g) = caída
+    const FALL_IMPACT_G   = 6.5;   // a partir de esta aceleración (en g) = caída
     const FALL_REARM_MS   = 5000;  // después de "Estoy bien", se ignoran movimientos por 5 s
 
     let fallState = 'idle'; // 'idle' | 'alert'
