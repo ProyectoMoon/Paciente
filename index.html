@@ -910,7 +910,7 @@
         <button class="pt-ble-action" id="pt-ble-btn" onclick="ptConnectBluetooth()">
           <i class="ti ti-bluetooth" aria-hidden="true"></i> Conectar
         </button>
-        <div class="pt-ble-hint" id="pt-ble-hint">Elegí tu dispositivo de la lista</div>
+        <div class="pt-ble-hint" id="pt-ble-hint">Elegí tu pulsera MOON de la lista</div>
         <!-- Se muestra solo si el navegador no puede usar Bluetooth (iPhone, Safari, Firefox...) -->
         <div class="pt-ble-help" id="pt-ble-help"></div>
       </div>
@@ -1512,19 +1512,13 @@
        Si la pulsera manda solo 4 datos, gMin no se usa; ver detección de caídas.)
 
        -------------------------------------------------------------------
-       POR QUÉ SE MUESTRAN TODOS LOS DISPOSITIVOS (no solo los que anuncian
-       el servicio de MOON):
-
-       Web Bluetooth no puede leer el modelo del chip (no existe forma de
-       filtrar "solo ESP32-C3 Super Mini") ni queremos depender del nombre
-       que le pusiste al dispositivo. Por eso se usa acceptAllDevices, que
-       hace que el selector del navegador muestre TODOS los dispositivos
-       Bluetooth cercanos (no solo ESP32) para poder elegir cualquiera sin
-       importar su nombre.
-
-       Como contrapartida, el filtro por servicio ya no evita que aparezcan
-       otros dispositivos (auriculares, etc.) en la lista — el usuario es
-       quien elige cuál es su pulsera.
+       SOLO SE MUESTRAN LAS PULSERAS MOON:
+       El selector del navegador lista únicamente los dispositivos cuyo
+       nombre Bluetooth empieza con "MOON" (también "Moon" o "moon").
+       El firmware se anuncia como "MOON" (BLE_DEVICE_NAME en
+       pulsera_moon.ino), así que auriculares, celulares, etc. no aparecen.
+       Si le cambiás el nombre a la pulsera, que siga empezando con MOON
+       (ej. "MOON-2"), o agregá el prefijo nuevo en BLE_NAME_PREFIXES.
 
        CONEXIÓN "SIEMPRE ACEPTADA":
        Al elegir cualquier dispositivo de la lista, la app se conecta a su
@@ -1561,6 +1555,7 @@
     ------------------------------------------------------------------- */
     const BLE_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
     const BLE_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a9';
+    const BLE_NAME_PREFIXES       = ['MOON', 'Moon', 'moon']; // solo aparecen dispositivos con estos nombres
 
     let bleDevice = null;
     let bleCharacteristic = null;
@@ -1738,11 +1733,12 @@
         } catch (e) { /* si falla la consulta, se intenta conectar igual */ }
       }
       try {
-        ptSetBleUI('connecting', 'Buscando dispositivos Bluetooth cercanos...');
+        ptSetBleUI('connecting', 'Buscando pulseras MOON cercanas...');
         const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
+          // Solo pulseras MOON en la lista (el nombre tiene que empezar con MOON)
+          filters: BLE_NAME_PREFIXES.map(prefijo => ({ namePrefix: prefijo })),
           // optionalServices es necesario para poder acceder a este
-          // servicio después de conectar, aunque no se use como filtro.
+          // servicio después de conectar.
           optionalServices: [BLE_SERVICE_UUID]
         });
         await ptConnectToDevice(device);
@@ -1750,7 +1746,7 @@
         console.error('MOON: error de Bluetooth', err);
         // El usuario cerró el selector sin elegir ningún dispositivo
         if (err.name === 'NotFoundError') {
-          ptSetBleUI('idle', 'Sin conectar', 'Elegí tu dispositivo de la lista');
+          ptSetBleUI('idle', 'Sin conectar', 'Elegí tu pulsera MOON de la lista');
         } else {
           ptSetBleUI('error', 'No se pudo conectar', err.message);
         }
@@ -1911,7 +1907,7 @@
     // quede mostrando el último valor recibido como si siguiera en vivo.
     function ptOnBluetoothDisconnected() {
       bleCharacteristic = null;
-      ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu dispositivo de la lista');
+      ptSetBleUI('idle', 'Pulsera desconectada', 'Elegí tu pulsera MOON de la lista');
       ptRenderWaiting();
     }
 
