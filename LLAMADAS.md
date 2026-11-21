@@ -1,8 +1,37 @@
-# Llamadas de emergencia con Twilio (gratis, usando Vercel)
+# Llamadas de emergencia
 
 Cuando la pulsera detecta una **caída** o un **signo vital crítico**, la página
-llama por teléfono al contacto de emergencia del paciente con un mensaje de voz
-en español. También hay un botón **"Llamar a mi contacto de emergencia"**.
+llama al contacto de emergencia del paciente. Hay dos formas:
+
+| | Telegram (CallMeBot) | Teléfono (Twilio) |
+|---|---|---|
+| Costo | **Gratis** | Prueba gratis 30 días, después pago |
+| Qué recibe el familiar | Llamada de Telegram que lee el mensaje | Llamada telefónica común |
+| Estado en `index.html` | `TELEGRAM_ACTIVO = true` | `TWILIO_ACTIVO = false` |
+
+---
+
+# Opción 1: llamada por Telegram (gratis)
+
+1. El **familiar** instala Telegram y tiene que tener un **nombre de usuario**
+   (Ajustes > Editar perfil > Nombre de usuario, ej: `@juanperez`).
+2. El familiar abre Telegram, busca **@CallMeBot_txtbot** y le manda **/start**.
+   Esto se hace una sola vez y autoriza a CallMeBot a llamarlo.
+3. En la página del paciente: **Editar perfil > Telegram del familiar** > `@juanperez`.
+4. Probalo con el botón **"Llamar a mi contacto de emergencia"**.
+
+Notas:
+- CallMeBot es un servicio gratuito externo (no es oficial de Telegram).
+- El navegador no puede leer la respuesta de CallMeBot, así que la página
+  muestra "Llamando…" cuando el pedido salió. Si no llega la llamada, revisá
+  que el familiar haya hecho el paso 2 y que el usuario esté bien escrito.
+
+---
+
+# Opción 2: llamada telefónica con Twilio (usando Vercel)
+
+Para activarla: poné `TWILIO_ACTIVO = true` en `index.html` (aparece el campo
+"Teléfono de emergencia" en el perfil) y seguí estos pasos.
 
 La página **no** guarda las credenciales de Twilio (cualquiera podría verlas en
 el código). La llamada la hace una función que corre en **Vercel** (plan gratis):
@@ -44,11 +73,13 @@ nada más: la página llama a `/api/llamada-emergencia` del mismo sitio.
 
 Si cambiás variables en Vercel después del deploy: Deployments > ⋯ > **Redeploy**.
 
-## 3. Cargar el teléfono del contacto
+## 3. Cargar el teléfono del contacto (Twilio)
 En la página: **Editar perfil > Teléfono de emergencia**, con código de país.
 Celular de Argentina: `+54 9` + código de área + número (ej: `+5491112345678`).
 
-## Cuándo se llama
+---
+
+# Cuándo se llama (las dos opciones)
 | Evento | Primera llamada | Repetición mientras siga |
 |---|---|---|
 | Caída | 15 s después (tiempo para tocar "Estoy bien") | cada 3 min |
@@ -57,5 +88,4 @@ Celular de Argentina: `+54 9` + código de área + número (ej: `+5491112345678`
 
 Los tiempos se cambian en las constantes `LLAMADA_*` de `index.html`.
 
-> Esto avisa a un familiar o cuidador. **No reemplaza** al 911 / 107: Twilio no
-> permite hacer llamadas automáticas a números de emergencia.
+> Esto avisa a un familiar o cuidador. **No reemplaza** al 911 / 107.
