@@ -2301,10 +2301,13 @@
     // ==========================================================================
     // LLAMADAS DE EMERGENCIA (Twilio)
     // La página NO habla directo con Twilio (eso expondría el Auth Token):
-    // le pide la llamada a una Twilio Function (ver twilio/functions/llamada-emergencia.js
-    // y twilio/README.md). Pegá acá la URL de esa función una vez desplegada.
+    // le pide la llamada a una función de Vercel (ver api/llamada-emergencia.js
+    // y twilio/README.md).
+    //  - Si la página está publicada en el mismo Vercel, dejá '/api/llamada-emergencia'.
+    //  - Si la página está en otro lado (ej. GitHub Pages), poné la URL completa:
+    //    'https://TU-PROYECTO.vercel.app/api/llamada-emergencia'
     // ==========================================================================
-    const TWILIO_FUNCTION_URL = 'https://TU-SERVICIO-1234.twil.io/llamada-emergencia';
+    const TWILIO_FUNCTION_URL = '/api/llamada-emergencia';
     const TWILIO_ENVIAR_SMS   = false;   // true = además de la llamada, manda un SMS
 
     const LLAMADA_GRACIA_CAIDA_MS     = 15 * 1000;      // espera antes de llamar por una caída (tiempo para "Estoy bien")
@@ -2339,7 +2342,7 @@
 
     function ptTwilioListo(silencioso) {
       if (!ptGetSession()) return false;
-      if (TWILIO_FUNCTION_URL.includes('TU-SERVICIO')) {
+      if (!TWILIO_FUNCTION_URL || TWILIO_FUNCTION_URL.includes('TU-PROYECTO')) {
         if (!silencioso) ptCallStatus(false, 'Las llamadas no están configuradas (falta TWILIO_FUNCTION_URL).');
         return false;
       }

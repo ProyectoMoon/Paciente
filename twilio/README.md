@@ -1,44 +1,50 @@
-# Llamadas de emergencia con Twilio
+# Llamadas de emergencia con Twilio (gratis, usando Vercel)
 
 Cuando la pulsera detecta una **caída** o un **signo vital crítico**, la página
-llama por teléfono al contacto de emergencia del paciente y le dice un mensaje
-de voz en español. También hay un botón **"Llamar a mi contacto de emergencia"**.
+llama por teléfono al contacto de emergencia del paciente con un mensaje de voz
+en español. También hay un botón **"Llamar a mi contacto de emergencia"**.
 
 La página **no** guarda las credenciales de Twilio (cualquiera podría verlas en
-el código). La llamada la hace una **Twilio Function**, que corre en Twilio:
+el código). La llamada la hace una función que corre en **Vercel** (plan gratis):
 
 ```
-index.html  --POST-->  Twilio Function (llamada-emergencia)  -->  llamada al contacto
+index.html  --POST-->  Vercel: /api/llamada-emergencia  -->  Twilio  -->  llamada al contacto
 ```
 
-## 1. Conseguir un número de Twilio
-Console > **Phone Numbers > Manage > Buy a number** (en la cuenta trial hay
-crédito de prueba). Elegí uno con capacidad **Voice**.
+## 1. Twilio (cuenta de prueba gratis)
+1. **Conseguí un número:** Phone Numbers > Manage > **Buy a number** (se paga con
+   el crédito de prueba). Tiene que tener **Voice**.
+2. **Verificá el teléfono que va a recibir las llamadas:** Phone Numbers > Manage >
+   **Verified Caller IDs** > Add new. Con la cuenta de prueba, Twilio solo llama a
+   números verificados, y la llamada empieza con un aviso corto en inglés.
+3. Anotá el **Account SID** y el **Auth Token**. Están en la página de inicio
+   de la consola; el token se ve con el ojito.
 
-> **Cuenta trial:** solo puede llamar a números **verificados**
-> (Phone Numbers > Manage > **Verified Caller IDs**), y la llamada empieza con
-> un aviso de Twilio en inglés ("press any key…"). Al pasar a cuenta paga
-> desaparecen las dos limitaciones.
+## 2. Vercel (gratis)
+1. Entrá a https://vercel.com y tocá **Sign Up** > **Continue with GitHub**
+   (plan **Hobby**, gratis).
+2. **Add New… > Project** > importá el repo **Paciente**.
+3. Antes de tocar Deploy, abrí **Environment Variables** y cargá:
+   | Key | Value |
+   |---|---|
+   | `TWILIO_ACCOUNT_SID` | tu Account SID (empieza con `AC`) |
+   | `TWILIO_AUTH_TOKEN` | tu Auth Token |
+   | `TWILIO_FROM` | tu número de Twilio, ej: `+15017122661` |
+   | `ALLOWED_PREFIXES` | `+54` (opcional: solo llamadas a Argentina) |
+4. Tocá **Deploy**. Vercel te da una dirección tipo `https://paciente-xxxx.vercel.app`.
 
-## 2. Crear la Function
-1. Console > **Functions and Assets > Services > Create Service** (ej: `moon`).
-2. **Add > Add Function**, ruta `/llamada-emergencia`.
-3. Pegá el contenido de `functions/llamada-emergencia.js`.
-4. Cambiá la visibilidad de la función a **Public** (el candado al lado del nombre).
-5. En **Settings > Environment Variables**:
-   - Dejá tildado *"Add my Twilio Credentials (ACCOUNT_SID) and (AUTH_TOKEN) to ENV"*.
-   - `TWILIO_FROM` = tu número de Twilio, ej: `+15017122661`
-   - `ALLOWED_ORIGINS` = el dominio donde está publicada la página, ej:
-     `https://proyectomoon.github.io` (sin barra al final; podés poner varios separados por coma)
-   - `ALLOWED_PREFIXES` (opcional) = `+54` para permitir solo llamadas a Argentina.
-6. **Deploy All**.
-7. Copiá la URL de la función (ej: `https://moon-1234.twil.io/llamada-emergencia`).
+La página queda publicada en esa dirección y las llamadas funcionan sin tocar
+nada más: la página llama a `/api/llamada-emergencia` del mismo sitio.
 
-## 3. Conectar la página
-En `index.html`, buscá `TWILIO_FUNCTION_URL` y pegá esa URL.
-Si querés también un SMS, poné `TWILIO_ENVIAR_SMS = true`.
+### ¿La página sigue publicada en otro lado (ej. GitHub Pages)?
+- En Vercel agregá la variable `ALLOWED_ORIGINS` con ese dominio, sin barra
+  al final, ej: `https://proyectomoon.github.io`.
+- En `index.html`, cambiá `TWILIO_FUNCTION_URL` por la URL completa:
+  `https://paciente-xxxx.vercel.app/api/llamada-emergencia`.
 
-## 4. Cargar el teléfono del contacto
+Si cambiás variables en Vercel después del deploy: Deployments > ⋯ > **Redeploy**.
+
+## 3. Cargar el teléfono del contacto
 En la página: **Editar perfil > Teléfono de emergencia**, con código de país.
 Celular de Argentina: `+54 9` + código de área + número (ej: `+5491112345678`).
 
